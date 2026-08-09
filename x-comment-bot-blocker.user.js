@@ -659,6 +659,9 @@
       transition:filter .15s ease,background .15s ease;}
     #xcbb-panel button:hover{filter:brightness(.94);} /* 浅色主题悬停加深(白字对比不降反升) */
     #xcbb-panel button:disabled{opacity:.4;cursor:not-allowed;}
+    /* 类禁用(保留点击事件→可提示不可用原因): 扫描中 ▶ / 待机时 ⏹ */
+    #xcbb-panel button.xcbb-disabled{opacity:.4;cursor:not-allowed;}
+    #xcbb-panel button.xcbb-disabled:hover{filter:none;}
     #xcbb-panel button.ghost{background:transparent;border:1px solid var(--xcbb-border-strong);color:var(--xcbb-dim);}
     #xcbb-panel button.ghost:hover{background:var(--xcbb-card-hover);border-color:var(--xcbb-border-hover);filter:none;}
     #xcbb-panel button.danger{background:var(--xcbb-danger);}
@@ -839,7 +842,7 @@
       <div id="xcbb-main" class="p-2 space-y-1.5">
         <div class="flex items-center gap-1.5">
           <button id="xcbb-run">▶ 扫描</button>
-          <button id="xcbb-stop" class="danger" disabled>⏹</button>
+          <button id="xcbb-stop" class="danger">⏹</button>
           <span id="xcbb-status" class="text-[11px] xcbb-dim"></span>
           <span class="flex-1"></span>
           <label class="flex items-center gap-0.5 text-[11px] text-[#262b26]" title="自动屏蔽(关=仅标记)">
@@ -1621,7 +1624,11 @@
     applyDock();
   });
   el('xcbb-run').addEventListener('click', tryStartScan);
-  el('xcbb-stop').addEventListener('click', () => { stopFlag = true; log('⏹ 正在停止…'); });
+  el('xcbb-stop').addEventListener('click', () => {
+    if (!running) { toast('当前没有进行中的扫描'); return; } // 不可用时点击→提示原因
+    stopFlag = true;
+    log('⏹ 正在停止…');
+  });
   function restorePanel() {
     panel.classList.remove('xcbb-collapsed');
     panel.style.left = '';
@@ -1836,8 +1843,11 @@
     el('xcbb-opt-idlerounds').value = settings.idleStopRounds;
     el('xcbb-dock').value = settings.dockPos;
     updateOverview();
-    el('xcbb-run').disabled = running;
-    el('xcbb-stop').disabled = !running;
+    // 禁用改用类实现(保留点击→提示不可用原因); title 悬停提示
+    el('xcbb-run').classList.toggle('xcbb-disabled', running);
+    el('xcbb-run').title = running ? '扫描进行中, 请稍候' : '开始扫描评论区';
+    el('xcbb-stop').classList.toggle('xcbb-disabled', !running);
+    el('xcbb-stop').title = !running ? '当前没有进行中的扫描' : '停止当前扫描';
     const st = el('xcbb-status');
     st.textContent = running ? '扫描中…' : '待机';
     st.style.color = running ? '#a3741f' : '';
