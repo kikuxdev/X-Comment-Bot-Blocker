@@ -2,7 +2,7 @@
 // @name          X 评论机器人屏蔽器
 // @name:en       X Comment Bot Blocker
 // @namespace     xcbb
-// @version       0.12.4
+// @version       0.12.5
 // @description   选取"机器人模板评论"或"不合理用户名(昵称/@handle)",一键扫描当前推文评论区,文本相似或用户名命中其一即自动屏蔽对应账号。内置约炮引流类高频规则模板(一键加载)、高频特征词挖掘、数据导出/导入,支持相似度阈值、白名单、试运行(仅标记)模式。
 // @description:en Select bot template comments, scan the current tweet's replies for similar text, and auto-block those accounts.
 // @author        you
@@ -1546,11 +1546,15 @@
     clearTimeout(t._timer);
     t._timer = setTimeout(() => t.classList.remove('show'), 2200);
   }
-  function showCtxMenuAt(x, y) {
+  // 快捷菜单: 固定出现在右上角(Tampermonkey 图标下方区域; 面板展开时让位到面板下方)
+  function showCtxMenu() {
     ctxMenu.classList.remove('hidden');
     const mw = ctxMenu.offsetWidth, mh = ctxMenu.offsetHeight;
-    ctxMenu.style.left = Math.min(window.innerWidth - mw - 8, Math.max(8, x)) + 'px';
-    ctxMenu.style.top = Math.min(window.innerHeight - mh - 8, Math.max(8, y)) + 'px';
+    const r = panel.getBoundingClientRect();
+    const expanded = !panel.classList.contains('xcbb-collapsed');
+    const top = expanded ? Math.min(window.innerHeight - mh - 8, r.bottom + 8) : 8;
+    ctxMenu.style.left = (window.innerWidth - mw - 8) + 'px';
+    ctxMenu.style.top = Math.max(8, top) + 'px';
     // 仅收起时显示"显示面板/停靠位置"
     const collapsed = panel.classList.contains('xcbb-collapsed');
     for (const el of ctxMenu.querySelectorAll('.xcbb-ctx-only-collapsed')) {
@@ -1565,7 +1569,7 @@
     if (e.target.closest('#xcbb-panel') || e.target.closest('#xcbb-ctx')) return;
     if (e.target.closest('article, a, button, input, textarea, [role="button"], [role="link"], [role="menu"], [data-testid]')) return;
     e.preventDefault();
-    showCtxMenuAt(e.clientX, e.clientY);
+    showCtxMenu();
   });
   ctxMenu.addEventListener('click', (e) => {
     const act = e.target.closest('[data-act]');
@@ -1586,7 +1590,7 @@
       settings.dockPos = dock.dataset.dock;
       saveSettings();
       applyDock();
-      showCtxMenuAt(parseInt(ctxMenu.style.left, 10), parseInt(ctxMenu.style.top, 10)); // 刷新高亮
+      showCtxMenu(); // 刷新高亮
     }
   });
   document.addEventListener('click', (e) => {
@@ -1602,7 +1606,7 @@
     el('xcbb-log-chevron').textContent = '▸';
     panel.classList.add('xcbb-collapsed');
     applyDock();
-    panel.title = '左键: 清理无效模板 | 右键: 主界面'; // 圆点操作提示
+    panel.title = '左键: 开始扫描 | 右键: 主界面'; // 圆点操作提示
     settings.panelCollapsed = true; // 记忆收起状态
     saveSettings();
   });
@@ -1613,10 +1617,11 @@
       setPickMode(null);
       log('✔ 已自动退出选取模式');
     }
-    // 停靠圆点: 左键 = 清理无效模板(保持收起, 浮动提示反馈结果)
+    // 停靠圆点: 左键 = 开始扫描(恢复面板以便观察统计与日志)
     if (panel.classList.contains('xcbb-collapsed') && !e.target.closest('#xcbb-min')) {
-      const n = cleanInvalidTemplates();
-      toast(n > 0 ? `🧹 已清理 ${n} 条无效模板` : '🧹 无无效模板');
+      restorePanel();
+      showSettings(false);
+      runScan();
     }
   });
   // 停靠圆点: 右键 = 恢复主界面(初始矩形页: 快速选择/日志/选取按钮)
