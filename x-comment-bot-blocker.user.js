@@ -66,6 +66,7 @@
     blocklog = blocklog.filter((b) => b.h !== h); // 同一账号只保留最新记录
     blocklog.push({ h, n: n || '', t: Date.now(), r: r || '' });
     saveBlocklog();
+    if (currentTab === 'data') renderBlocklog(); // 数据页打开时实时刷新, 避免扫描后列表不更新
   };
   // 已确认垃圾账号语料(用于挖掘高频特征词): [{ d: 昵称, h: handle }]
   let corpus = GM_getValue('xcbb_corpus', []);
@@ -975,9 +976,10 @@
             <div class="flex items-center gap-1.5 mb-1.5 flex-wrap">
               <h3 class="xcbb-section-title">近期屏蔽记录</h3>
               <span class="flex-1"></span>
+              <button id="xcbb-blocklog-export" class="ghost tiny" title="导出屏蔽记录为 JSON 文件">导出</button>
               <button id="xcbb-blocklog-clear" class="ghost tiny" title="清空全部屏蔽记录(不影响已屏蔽的账号)">清空</button>
             </div>
-            <p class="text-[11px] xcbb-dim mb-1.5 leading-relaxed">脚本屏蔽的账号留痕于此, 误伤可追溯: 🏠 打开对方主页手动解除屏蔽, ✓ 加入白名单防止下次再锁。</p>
+            <p class="text-[11px] xcbb-dim mb-1.5 leading-relaxed">脚本屏蔽的账号留痕于此(上限300条): 🏠 打开对方主页手动解除屏蔽, ✓ 加入白名单防止下次再锁, 导出为 JSON 备份。</p>
             <div id="xcbb-blocklog-list"></div>
           </section>
         </div>
@@ -1324,6 +1326,21 @@
     }, null, 2);
   }
 
+  // 仅导出屏蔽记录(独立 JSON, 便于查看/备份)
+  function downloadBlocklog() {
+    const blob = new Blob([JSON.stringify({
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      blocklog: blocklog.map((b) => ({ h: b.h, n: b.n, t: b.t, r: b.r }))
+    }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'blocklog.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    log(`✔ 已下载 blocklog.json (${blocklog.length} 条屏蔽记录)`);
+  }
+
   function downloadJson() {
     const blob = new Blob([exportJson()], { type: 'application/json' });
     const a = document.createElement('a');
@@ -1632,6 +1649,7 @@
     e.target.value = '';
   });
   el('xcbb-remote-pull').addEventListener('click', pullRemoteJson);
+  el('xcbb-blocklog-export').addEventListener('click', downloadBlocklog);
   el('xcbb-blocklog-clear').addEventListener('click', () => {
     if (!blocklog.length) return;
     if (confirm('清空全部屏蔽记录? (不影响已屏蔽的账号)')) {
