@@ -231,6 +231,10 @@
 
 本脚本仅供个人研究使用。自动屏蔽功能可能违反 X 的服务条款,由此产生的账号风险(包括但不限于限制、封禁)由使用者自行承担。
 
+## 🧑‍💻 开发者
+
+修改/扩展脚本前请先读 [`AGENTS.md`](AGENTS.md)(工作流、隐私红线、缺口清单、Pros & Cons)与 [`DEVELOPMENT-LESSONS.md`](DEVELOPMENT-LESSONS.md)(踩坑史);纯逻辑测试在 `tests/`(node 直接运行)。
+
 ## 📦 更新日志
 
 - **0.14.2** 屏蔽记录卡片独立导出(blocklog.json)+ 数据页实时刷新
