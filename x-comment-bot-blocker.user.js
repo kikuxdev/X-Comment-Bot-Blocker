@@ -693,9 +693,9 @@
     /* 右上角轻量通知(非模态, 不锁屏, 自动消失, 点击可关闭) */
     #xcbb-notify{position:fixed;right:12px;z-index:1000002;min-width:220px;max-width:320px;
       border-radius:12px;padding:10px 14px;box-shadow:0 8px 24px rgba(0,0,0,.25);
-      opacity:0;transform:translateY(-8px);cursor:pointer;
+      opacity:0;transform:translateY(-8px);cursor:pointer;pointer-events:none; /* 隐藏后不拦截任何点击 */
       transition:opacity .25s ease,transform .25s ease;}
-    #xcbb-notify.show{opacity:1;transform:translateY(0);}
+    #xcbb-notify.show{opacity:1;transform:translateY(0);pointer-events:auto;}
     #xcbb-notify.success{background:var(--xcbb-ok-bg);border:1px solid var(--xcbb-ok-border);color:var(--xcbb-ok-text);}
     #xcbb-notify.info{background:var(--xcbb-info-bg);border:1px solid var(--xcbb-info-border);color:var(--xcbb-info-text);}
     #xcbb-notify .xcbb-notify-title{font-size:12.5px;font-weight:600;}
@@ -1763,7 +1763,9 @@
     const inFull = panel.classList.contains('xcbb-full');
     let top = 8;
     if (!inFull && r.top < 120 && r.bottom < window.innerHeight - 40) {
-      top = r.bottom + 8;
+      top = r.bottom + 8; // 面板在顶部时通知放到面板下方
+    } else if (inFull) {
+      top = 48; // 全高模式放到标题栏下方, 不遮挡 ⚙/🗕
     }
     n.style.top = Math.max(8, top) + 'px';
     clearTimeout(n._timer);
