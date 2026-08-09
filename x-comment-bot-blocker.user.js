@@ -53,6 +53,9 @@
   const saveSettings = () => GM_setValue('xcbb_settings', settings);
   const saveTemplates = () => GM_setValue('xcbb_templates', templates);
   const saveBadnames = () => GM_setValue('xcbb_badnames', badnames);
+  // 评论关键词(独立于用户名名单, 仅用于评论文本匹配): 字符串数组
+  let commentKws = GM_getValue('xcbb_comment_kws', []);
+  const saveCommentKws = () => GM_setValue('xcbb_comment_kws', commentKws);
   // 已确认垃圾账号语料(用于挖掘高频特征词): [{ d: 昵称, h: handle }]
   let corpus = GM_getValue('xcbb_corpus', []);
   const saveCorpus = () => {
@@ -420,6 +423,12 @@
     '/^(?!.*(?:19|20)\\d{2}$)[a-z]{6,}\\d{5,}$/i',
     '/^(?!.*(?:19|20)\\d{2}$)[a-z]+_[a-z]+\\d{5,}$/i'
   ];
+  // 内置低风险词中不参与评论匹配的常见词(日常/反诈讨论也会出现; 仍可用于用户名匹配)
+  const COMMENT_KW_EXCLUDE = new Set(['一夜情', '处女', '处子', '脱衣', '女仆', '选妃', '赌博', '网赌', '刷单']);
+  // 评论关键词匹配源: 自定义列表 + 内置低风险词(排除常见词); 与用户名名单完全独立
+  function commentKwList() {
+    return [...commentKws, ...BUILTIN_LOW.filter((w) => !COMMENT_KW_EXCLUDE.has(w))];
+  }
 
   function loadBuiltin() {
     let addedLow = 0, addedMed = 0, skipped = 0;
@@ -466,11 +475,13 @@
       textHit = bestIdx >= 0 && best >= settings.threshold;
     }
 
-    // 评论关键词维度: 评论文本含名单关键词即命中(可选, 默认关)
+    // 评论关键词维度: 评论文本含关键词即命中(可选, 默认关)
+    // 仅使用: 自定义评论关键词 + 内置低风险词(排除日常常见词)。
+    // 用户名名单里的普通词(如 高中/免费)不参与评论匹配, 防误伤正常讨论。
     let kwHit = null;
     if (settings.commentKeywords && norm.length >= 2) {
-      for (const en of badnames) {
-        if (nameMatches(norm, en.d)) { kwHit = en.d; break; }
+      for (const kw of commentKwList()) {
+        if (nameMatches(norm, kw)) { kwHit = kw; break; }
       }
     }
     if (!textHit && !nameHit && !kwHit) {
@@ -544,7 +555,7 @@
     panel.classList.add('xcbb-scanning'); // 圆点进入扫描进度态
     panel.style.setProperty('--xcbb-progress', '0%');
     updateUI();
-    log(`▶ 开始扫描 | 阈值 ${settings.threshold.toFixed(2)} | ${settings.autoBlock ? '自动屏蔽' : '仅标记(试运行)'} | 模板 ${templates.length} 条 / 用户名 ${badnames.length} 条${settings.commentKeywords ? ' | 评论关键词匹配开' : ''}${processed.size ? ` | 已评估 ${processed.size} 条, 本次仅处理新增(刷新页面可重置)` : ''}`);
+    log(`▶ 开始扫描 | 阈值 ${settings.threshold.toFixed(2)} | ${settings.autoBlock ? '自动屏蔽' : '仅标记(试运行)'} | 模板 ${templates.length} 条 / 用户名 ${badnames.length} 条${settings.commentKeywords ? ` | 评论关键词 ${commentKwList().length} 条(内置+自定义)` : ''}${processed.size ? ` | 已评估 ${processed.size} 条, 本次仅处理新增(刷新页面可重置)` : ''}`);
     notify('⏳ 扫描进行中', '正在扫描评论区, 请稍候…', 'info', 3000); // 开始即弹进行中通知(~3s)
 
     try {
@@ -701,7 +712,7 @@
     #xcbb-modal textarea{width:100%;min-height:300px;flex:1;box-sizing:border-box;background:#131c26;
       border:1px solid #2c3946;color:#e7e9ea;border-radius:8px;padding:8px;
       font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;resize:vertical;}
-    #xcbb-manual,#xcbb-white,#xcbb-remote-url,.xcbb-num-input{width:100%;box-sizing:border-box;background:#131c26;
+    #xcbb-manual,#xcbb-white,#xcbb-remote-url,#xcbb-comment-kws,.xcbb-num-input{width:100%;box-sizing:border-box;background:#131c26;
       border:1px solid #2c3946;color:#e7e9ea;border-radius:8px;padding:4px 8px;
       font-size:12px;resize:vertical;font-family:inherit;}
     .xcbb-num-input{width:90px;flex:none;border-radius:6px;padding:2px 6px;font-size:11px;}
@@ -938,9 +949,11 @@
             <label class="flex items-center gap-1.5 text-[11px] mt-1 text-[#c9d1d9]">
               <input id="xcbb-contain" type="checkbox"> 包含匹配(短模板被长评论完整包含)
             </label>
-            <label class="flex items-center gap-1.5 text-[11px] mt-1 text-[#c9d1d9]" title="评论文本含名单关键词(如约炮/福利)即命中; 名单里的中风险词(同城/附近)可能误伤正常评论, 建议先仅标记验证">
+            <label class="flex items-center gap-1.5 text-[11px] mt-1 text-[#c9d1d9]" title="评论文本含关键词即命中(如约炮/裸聊); 匹配源为内置低风险词+下方自定义列表, 与用户名名单独立, 名单里的普通词不会误伤正常评论">
               <input id="xcbb-commentkw" type="checkbox"> 评论关键词匹配
             </label>
+            <div class="text-[10px] xcbb-dim mt-1">评论关键词(每行一条, 与名单独立; 内置低风险词始终生效)</div>
+            <textarea id="xcbb-comment-kws" rows="3" class="mt-0.5" placeholder="每行一条, 如: 约炮 / /正则/"></textarea>
             <label class="flex items-center gap-1.5 text-[11px] mt-1 text-[#c9d1d9]" title="屏蔽时隐藏 X 的菜单/确认弹层, 扫描不打断阅读">
               <input id="xcbb-silent" type="checkbox"> 静默屏蔽(不显示确认弹窗)
             </label>
@@ -1191,6 +1204,8 @@
     lines.push(`# X 评论机器人屏蔽器 数据导出 ${new Date().toLocaleString()}`);
     lines.push(`# 模板评论 ${templates.length} 条:`);
     for (const t of templates) lines.push(t.o);
+    lines.push(`# 评论关键词 ${commentKws.length} 条:`);
+    for (const kw of commentKws) lines.push(kw);
     lines.push(`# 语料(已确认垃圾账号) ${corpus.length} 条: 昵称 | @handle`);
     for (const c of corpus) lines.push(`${c.d || '(无昵称)'} | @${c.h}`);
     lines.push(`# 当前名单 ${badnames.length} 条:`);
@@ -1212,6 +1227,7 @@
       exportedAt: new Date().toISOString(),
       templates: templates.map((t) => t.o),
       badnames: badnames.map((en) => (en.h ? { d: en.d, h: en.h } : { d: en.d })),
+      commentKws: commentKws,
       corpus: corpus.map((c) => ({ d: c.d, h: c.h }))
     }, null, 2);
   }
@@ -1228,7 +1244,7 @@
 
   // 合并 JSON 数据(去重, 不覆盖) — 供本地文件导入与远程拉取共用
   function mergeJsonData(data) {
-    let nTpl = 0, nBad = 0, nCor = 0;
+    let nTpl = 0, nBad = 0, nCor = 0, nKw = 0;
     if (Array.isArray(data.templates)) {
       for (const o of data.templates) {
         const n = normalize(String(o));
@@ -1249,6 +1265,12 @@
         }
       }
     }
+    if (Array.isArray(data.commentKws)) {
+      for (const kw of data.commentKws) {
+        const k = String(kw || '').trim();
+        if (k && !commentKws.includes(k)) { commentKws.push(k); nKw++; }
+      }
+    }
     if (Array.isArray(data.corpus)) {
       for (const c of data.corpus) {
         const d = String((c && c.d) || '');
@@ -1261,12 +1283,13 @@
     }
     saveTemplates();
     saveBadnames();
+    saveCommentKws();
     saveCorpus();
     renderTemplates();
     renderBadnames();
     renderFreq();
     updateOverview();
-    return { nTpl, nBad, nCor };
+    return { nTpl, nBad, nCor, nKw };
   }
 
   function importJsonFile(file) {
@@ -1276,7 +1299,7 @@
         const data = JSON.parse(reader.result);
         if (!data || typeof data !== 'object') throw new Error('文件不是 JSON 对象');
         const r = mergeJsonData(data);
-        log(`✔ JSON 导入成功: 模板 +${r.nTpl} / 名单 +${r.nBad} / 语料 +${r.nCor} (合并去重)`);
+        log(`✔ JSON 导入成功: 模板 +${r.nTpl} / 名单 +${r.nBad} / 关键词 +${r.nKw} / 语料 +${r.nCor} (合并去重)`);
       } catch (e) {
         log(`⚠ JSON 解析失败: ${e.message}`);
       }
@@ -1316,7 +1339,7 @@
           totals.lastHash = hashStr(raw);
           saveTotals();
           updateOverview();
-          log(`✔ 远程同步${mode === 'auto' ? '(自动, 检测到更新)' : ''}: 模板 +${r.nTpl} / 名单 +${r.nBad} / 语料 +${r.nCor} (合并去重)`);
+          log(`✔ 远程同步${mode === 'auto' ? '(自动, 检测到更新)' : ''}: 模板 +${r.nTpl} / 名单 +${r.nBad} / 关键词 +${r.nKw} / 语料 +${r.nCor} (合并去重)`);
         } catch (e) {
           if (mode === 'manual') log(`⚠ 远程拉取失败: ${e.message}`);
         }
@@ -1558,6 +1581,11 @@
     settings.whitelist = e.target.value;
     saveSettings();
   });
+  el('xcbb-comment-kws').addEventListener('change', (e) => {
+    commentKws = String(e.target.value || '').split(/[\n,，\s]+/).map((s) => s.trim()).filter(Boolean);
+    saveCommentKws();
+    if (!commentKws.length) log('ℹ 评论关键词列表已清空(内置低风险词仍生效)');
+  });
   const bindNum = (id, key, min, max) => {
     el(id).addEventListener('change', (e) => {
       const v = parseInt(e.target.value, 10);
@@ -1778,6 +1806,7 @@
     el('xcbb-commentkw').checked = settings.commentKeywords;
     el('xcbb-silent').checked = settings.silentBlock;
     el('xcbb-white').value = settings.whitelist;
+    el('xcbb-comment-kws').value = commentKws.join('\n');
     el('xcbb-remote-url').value = settings.remoteUrl || '';
     el('xcbb-autosync').checked = settings.autoSync;
     el('xcbb-scan').textContent = statScanned;
