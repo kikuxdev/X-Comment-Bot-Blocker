@@ -295,7 +295,7 @@
   let urlOwner = null;
   let statScanned = 0, statMatched = 0, statBlocked = 0;
   // 累计统计(跨扫描/跨页面持久化, 与 X 屏蔽列表可对照)
-  let totals = Object.assign({ scanned: 0, matched: 0, blocked: 0, lastSync: '' }, GM_getValue('xcbb_stats', {}));
+  let totals = Object.assign({ scanned: 0, matched: 0, blocked: 0, lastSync: '', lastHash: '' }, GM_getValue('xcbb_stats', {}));
   const saveTotals = () => GM_setValue('xcbb_stats', totals);
   let running = false;
   let stopFlag = false;
@@ -610,28 +610,19 @@
       justify-content:center;font-size:20px;line-height:1;pointer-events:none;}
     #xcbb-panel.xcbb-collapsed #xcbb-collapsed-icon{display:flex;}
     /* 圆点右键快捷菜单 */
-    #xcbb-ctx{position:fixed;z-index:1000001;width:158px;background:#17212d;border:1px solid #33404f;
-      border-radius:10px;padding:4px;box-shadow:0 8px 24px rgba(0,0,0,.5);}
-    #xcbb-ctx button{display:flex;align-items:center;gap:6px;width:100%;background:transparent;border:none;
-      color:#c9d1d9;font-size:11.5px;padding:6px 8px;border-radius:6px;cursor:pointer;text-align:left;
-      transition:background .15s ease;}
-    #xcbb-ctx button:hover{background:#1e2a38;}
-    #xcbb-ctx button.active{color:#1d9bf0;background:#12293f;}
-    #xcbb-ctx .xcbb-ctx-title{font-size:9.5px;color:#6e767d;text-transform:uppercase;letter-spacing:.05em;
-      padding:5px 8px 2px;}
-    #xcbb-ctx .xcbb-ctx-dock{display:flex;gap:4px;padding:0 8px 6px;}
-    #xcbb-ctx .xcbb-ctx-dock button{justify-content:center;padding:3px 0;border:1px solid #2c3946;}
-    #xcbb-ctx .xcbb-ctx-dock button:hover{border-color:#1d9bf0;}
-    /* 浮动提示(圆点/菜单操作反馈) */
+    /* 浮动提示(操作反馈) */
     #xcbb-toast{position:fixed;z-index:1000002;right:56px;top:50%;transform:translateY(-50%) translateX(8px);
       background:#1b2633;border:1px solid #33404f;color:#e7e9ea;font-size:12px;padding:8px 12px;
       border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.5);opacity:0;pointer-events:none;
       transition:opacity .2s ease,transform .2s ease;}
     #xcbb-toast.show{opacity:1;transform:translateY(-50%) translateX(0);}
     /* 圆点扫描进度: 环形填充 + 呼吸动画 + 计数徽标 */
-    #xcbb-panel.xcbb-collapsed.xcbb-scanning{background:conic-gradient(#f0a020 var(--xcbb-progress,0%), #2c3946 0);}
-    #xcbb-panel.xcbb-collapsed.xcbb-scanning #xcbb-collapsed-icon{animation:xcbb-pulse 1.2s ease-in-out infinite;}
-    @keyframes xcbb-pulse{0%,100%{opacity:1}50%{opacity:.5}}
+    #xcbb-panel.xcbb-collapsed.xcbb-scanning{background:conic-gradient(#f0a020 var(--xcbb-progress,0%), #2c3946 0);
+      animation:xcbb-glow 1.6s ease-in-out infinite;}
+    @keyframes xcbb-glow{
+      0%,100%{box-shadow:0 8px 30px rgba(0,0,0,.5), 0 0 0 0 rgba(240,160,32,.45);}
+      50%{box-shadow:0 8px 30px rgba(0,0,0,.5), 0 0 0 9px rgba(240,160,32,0);}
+    }
     #xcbb-pill-count{position:absolute;bottom:1px;right:1px;background:#f4212e;color:#fff;
       font-size:8px;line-height:10px;padding:0 3px;border-radius:9999px;min-width:12px;text-align:center;}
     /* 扫描完成结果对话框 */
@@ -950,6 +941,14 @@
                 <span class="text-[10px] xcbb-dim">轮</span>
               </div>
             </div>
+            <div class="flex items-center justify-between mt-1.5" title="收起圆点的停靠位置">
+              <span class="text-[11px] text-[#c9d1d9]">圆点停靠</span>
+              <select id="xcbb-dock" class="xcbb-num-input">
+                <option value="top">上</option>
+                <option value="center">中</option>
+                <option value="bottom">下</option>
+              </select>
+            </div>
             <h3 class="xcbb-section-title mt-3 mb-1.5">白名单</h3>
             <div class="text-[10px] xcbb-dim mb-1">每行一个用户名, 不扫描/不屏蔽</div>
             <textarea id="xcbb-white" rows="3" placeholder="如: 我关注的人"></textarea>
@@ -1256,13 +1255,20 @@
     reader.readAsText(file);
   }
 
-  // 远程拉取(Gist raw URL)并合并
-  function pullRemoteJson() {
-    const url = (el('xcbb-remote-url').value || '').trim();
-    if (!url) { log('⚠ 请先填写数据源 URL'); return; }
+  // 内容哈希(远程同步变化检测: 内容没变就不重复合并)
+  function hashStr(s) {
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    return 'h' + (h >>> 0).toString(36);
+  }
+
+  // 远程拉取(Gist raw URL): mode='auto' 仅内容变化时合并; 'manual' 始终合并
+  function fetchRemoteJson(mode) {
+    const url = (el('xcbb-remote-url').value || settings.remoteUrl || '').trim();
+    if (!url) { if (mode === 'manual') log('⚠ 请先填写数据源 URL'); return; }
     settings.remoteUrl = url;
     saveSettings();
-    log('📡 正在拉取数据源…');
+    if (mode === 'manual') log('📡 正在拉取数据源…');
     GM_xmlhttpRequest({
       method: 'GET',
       url,
@@ -1270,21 +1276,27 @@
       onload: (res) => {
         try {
           if (res.status >= 400) throw new Error(`HTTP ${res.status}`);
-          const data = JSON.parse(res.responseText);
+          const raw = res.responseText;
+          const data = JSON.parse(raw);
           if (!data || typeof data !== 'object') throw new Error('不是 JSON 对象');
+          if (mode === 'auto') {
+            if (hashStr(raw) === totals.lastHash) { log('ℹ 远程数据无更新, 跳过合并'); return; }
+          }
           const r = mergeJsonData(data);
           totals.lastSync = new Date().toLocaleString();
+          totals.lastHash = hashStr(raw);
           saveTotals();
           updateOverview();
-          log(`✔ 远程同步完成: 模板 +${r.nTpl} / 名单 +${r.nBad} / 语料 +${r.nCor} (合并去重)`);
+          log(`✔ 远程同步${mode === 'auto' ? '(自动, 检测到更新)' : ''}: 模板 +${r.nTpl} / 名单 +${r.nBad} / 语料 +${r.nCor} (合并去重)`);
         } catch (e) {
-          log(`⚠ 远程拉取失败: ${e.message}`);
+          if (mode === 'manual') log(`⚠ 远程拉取失败: ${e.message}`);
         }
       },
-      onerror: () => log('⚠ 网络错误, 拉取失败'),
-      ontimeout: () => log('⚠ 请求超时(15s)')
+      onerror: () => { if (mode === 'manual') log('⚠ 网络错误, 拉取失败'); },
+      ontimeout: () => { if (mode === 'manual') log('⚠ 请求超时(15s)'); }
     });
   }
+  const pullRemoteJson = () => fetchRemoteJson('manual');
 
   function showExportModal(text, title) {
     $('#xcbb-modal')?.remove();
@@ -1462,6 +1474,10 @@
     e.target.value = '';
   });
   el('xcbb-remote-pull').addEventListener('click', pullRemoteJson);
+  el('xcbb-autosync').addEventListener('change', (e) => {
+    settings.autoSync = e.target.checked;
+    saveSettings();
+  });
   el('xcbb-import-toggle').addEventListener('click', () => {
     const area = el('xcbb-import-area');
     if (area.classList.contains('hidden')) {
@@ -1525,6 +1541,11 @@
   bindNum('xcbb-opt-scrolldelay', 'scrollDelayMs', 200, 10000);
   bindNum('xcbb-opt-maxrounds', 'maxRounds', 1, 500);
   bindNum('xcbb-opt-idlerounds', 'idleStopRounds', 1, 20);
+  el('xcbb-dock').addEventListener('change', (e) => {
+    settings.dockPos = e.target.value;
+    saveSettings();
+    applyDock();
+  });
   el('xcbb-run').addEventListener('click', runScan);
   el('xcbb-stop').addEventListener('click', () => { stopFlag = true; log('⏹ 正在停止…'); });
   function restorePanel() {
@@ -1538,30 +1559,12 @@
     saveSettings();
   }
 
-  /* ---- 圆点停靠位置 + 右键快捷菜单 ---- */
+  /* ---- 圆点停靠位置 ---- */
   function applyDock() {
     panel.classList.toggle('xcbb-dock-top', settings.dockPos === 'top');
     panel.classList.toggle('xcbb-dock-center', settings.dockPos === 'center');
     panel.classList.toggle('xcbb-dock-bottom', settings.dockPos === 'bottom');
   }
-  const ctxMenu = document.createElement('div');
-  ctxMenu.id = 'xcbb-ctx';
-  ctxMenu.className = 'hidden';
-  ctxMenu.innerHTML = `
-    <div class="xcbb-ctx-title">脚本快捷</div>
-    <button data-act="scan">▶ 开始扫描</button>
-    <button data-act="clean">🧹 清理无效模板</button>
-    <button data-act="sync">📡 同步数据</button>
-    <button data-act="show" class="xcbb-ctx-only-collapsed">🏠 显示面板</button>
-    <button data-act="settings">⚙ 设置页面</button>
-    <div class="xcbb-ctx-title xcbb-ctx-only-collapsed">停靠位置</div>
-    <div class="xcbb-ctx-dock xcbb-ctx-only-collapsed">
-      <button data-dock="top">上</button>
-      <button data-dock="center">中</button>
-      <button data-dock="bottom">下</button>
-    </div>`;
-  document.body.appendChild(ctxMenu);
-  function hideCtxMenu() { ctxMenu.classList.add('hidden'); }
   function toast(msg) {
     let t = $('#xcbb-toast');
     if (!t) { t = document.createElement('div'); t.id = 'xcbb-toast'; document.body.appendChild(t); }
@@ -1588,56 +1591,6 @@
     card.querySelector('#xcbb-result-close').addEventListener('click', close);
     box.addEventListener('click', (e) => { if (e.target === box) close(); });
   }
-  // 快捷菜单: 固定出现在右上角(Tampermonkey 图标下方区域; 面板展开时让位到面板下方)
-  function showCtxMenu() {
-    ctxMenu.classList.remove('hidden');
-    const mw = ctxMenu.offsetWidth, mh = ctxMenu.offsetHeight;
-    const r = panel.getBoundingClientRect();
-    const expanded = !panel.classList.contains('xcbb-collapsed');
-    const top = expanded ? Math.min(window.innerHeight - mh - 8, r.bottom + 8) : 8;
-    ctxMenu.style.left = (window.innerWidth - mw - 8) + 'px';
-    ctxMenu.style.top = Math.max(8, top) + 'px';
-    // 仅收起时显示"显示面板/停靠位置"
-    const collapsed = panel.classList.contains('xcbb-collapsed');
-    for (const el of ctxMenu.querySelectorAll('.xcbb-ctx-only-collapsed')) {
-      el.style.display = collapsed ? '' : 'none';
-    }
-    for (const b of ctxMenu.querySelectorAll('[data-dock]')) {
-      b.classList.toggle('active', b.dataset.dock === settings.dockPos);
-    }
-  }
-  // 页面空白区域右键 → 脚本快捷菜单(快速命令 + 设置); 交互元素上不拦截
-  document.addEventListener('contextmenu', (e) => {
-    if (e.target.closest('#xcbb-panel') || e.target.closest('#xcbb-ctx')) return;
-    if (e.target.closest('article, a, button, input, textarea, [role="button"], [role="link"], [role="menu"], [data-testid]')) return;
-    e.preventDefault();
-    showCtxMenu();
-  });
-  ctxMenu.addEventListener('click', (e) => {
-    const act = e.target.closest('[data-act]');
-    if (act) {
-      hideCtxMenu();
-      const a = act.dataset.act;
-      if (a === 'scan') { restorePanel(); showSettings(false); runScan(); }
-      else if (a === 'clean') {
-        const n = cleanInvalidTemplates();
-        toast(n > 0 ? `🧹 已清理 ${n} 条无效模板` : '🧹 无无效模板');
-      }
-      else if (a === 'sync') { fetchRemoteJson('manual'); }
-      else if (a === 'show') { restorePanel(); showSettings(false); }
-      else if (a === 'settings') { restorePanel(); showSettings(true); }
-    }
-    const dock = e.target.closest('[data-dock]');
-    if (dock) {
-      settings.dockPos = dock.dataset.dock;
-      saveSettings();
-      applyDock();
-      showCtxMenu(); // 刷新高亮
-    }
-  });
-  document.addEventListener('click', (e) => {
-    if (!ctxMenu.classList.contains('hidden') && !ctxMenu.contains(e.target)) hideCtxMenu();
-  });
   el('xcbb-min').addEventListener('click', () => {
     // 收起前清掉拖拽偏移, 让圆点停靠屏幕右侧垂直居中
     panel.style.left = '';
@@ -1779,6 +1732,7 @@
     el('xcbb-silent').checked = settings.silentBlock;
     el('xcbb-white').value = settings.whitelist;
     el('xcbb-remote-url').value = settings.remoteUrl || '';
+    el('xcbb-autosync').checked = settings.autoSync;
     el('xcbb-scan').textContent = statScanned;
     el('xcbb-match').textContent = statMatched;
     el('xcbb-block').textContent = statBlocked;
@@ -1787,6 +1741,7 @@
     el('xcbb-opt-scrolldelay').value = settings.scrollDelayMs;
     el('xcbb-opt-maxrounds').value = settings.maxRounds;
     el('xcbb-opt-idlerounds').value = settings.idleStopRounds;
+    el('xcbb-dock').value = settings.dockPos;
     updateOverview();
     el('xcbb-run').disabled = running;
     el('xcbb-stop').disabled = !running;
@@ -1811,6 +1766,22 @@
     panel.classList.add('xcbb-collapsed');
     applyDock();
   }
+  // 启动自动同步(延迟 3s 避开页面加载高峰; 仅内容变化时合并)
+  if (settings.autoSync && settings.remoteUrl) {
+    setTimeout(() => fetchRemoteJson('auto'), 3000);
+  }
+  // Tampermonkey 菜单命令(点 TM 图标 → 脚本名 → 菜单)
+  try {
+    GM_registerMenuCommand('▶ 开始扫描', () => { restorePanel(); showSettings(false); runScan(); });
+    GM_registerMenuCommand('⏹ 停止扫描', () => { stopFlag = true; log('⏹ 正在停止…'); });
+    GM_registerMenuCommand('🧹 清理无效模板', () => {
+      const n = cleanInvalidTemplates();
+      toast(n > 0 ? `🧹 已清理 ${n} 条无效模板` : '🧹 无无效模板');
+    });
+    GM_registerMenuCommand('📡 同步数据', () => fetchRemoteJson('manual'));
+    GM_registerMenuCommand('🏠 显示面板', () => { restorePanel(); showSettings(false); });
+    GM_registerMenuCommand('⚙ 打开设置', () => { restorePanel(); showSettings(true); });
+  } catch (e) { /* 非 Tampermonkey 环境时忽略 */ }
   renderTemplates();
   renderBadnames();
   renderFreq();
