@@ -2,7 +2,7 @@
 // @name          X 评论机器人屏蔽器
 // @name:en       X Comment Bot Blocker
 // @namespace     xcbb
-// @version       0.12.8
+// @version       0.12.9
 // @description   选取"机器人模板评论"或"不合理用户名(昵称/@handle)",一键扫描当前推文评论区,文本相似或用户名命中其一即自动屏蔽对应账号。内置约炮引流类高频规则模板(一键加载)、高频特征词挖掘、数据导出/导入,支持相似度阈值、白名单、试运行(仅标记)模式。
 // @description:en Select bot template comments, scan the current tweet's replies for similar text, and auto-block those accounts.
 // @author        kikuxdev
@@ -611,12 +611,16 @@
       justify-content:center;font-size:20px;line-height:1;pointer-events:none;}
     #xcbb-panel.xcbb-collapsed #xcbb-collapsed-icon{display:flex;}
     /* 圆点右键快捷菜单 */
-    /* 浮动提示(操作反馈) */
-    #xcbb-toast{position:fixed;z-index:1000002;right:56px;top:50%;transform:translateY(-50%) translateX(8px);
-      background:#1b2633;border:1px solid #33404f;color:#e7e9ea;font-size:12px;padding:8px 12px;
-      border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.5);opacity:0;pointer-events:none;
-      transition:opacity .2s ease,transform .2s ease;}
-    #xcbb-toast.show{opacity:1;transform:translateY(-50%) translateX(0);}
+    /* 右上角轻量通知(非模态, 不锁屏, 自动消失, 点击可关闭) */
+    #xcbb-notify{position:fixed;right:12px;z-index:1000002;min-width:220px;max-width:320px;
+      border-radius:12px;padding:10px 14px;box-shadow:0 8px 24px rgba(0,0,0,.25);
+      opacity:0;transform:translateY(-8px);cursor:pointer;
+      transition:opacity .25s ease,transform .25s ease;}
+    #xcbb-notify.show{opacity:1;transform:translateY(0);}
+    #xcbb-notify.success{background:#d9f2e3;border:1px solid #9fd8b8;color:#14693a;}
+    #xcbb-notify.info{background:#e8eef7;border:1px solid #b9c9e4;color:#2f4b7c;}
+    #xcbb-notify .xcbb-notify-title{font-size:12.5px;font-weight:600;}
+    #xcbb-notify .xcbb-notify-body{font-size:11.5px;margin-top:2px;opacity:.9;}
     /* 圆点扫描进度: 环形填充 + 呼吸动画 + 计数徽标 */
     #xcbb-panel.xcbb-collapsed.xcbb-scanning{background:conic-gradient(#f0a020 var(--xcbb-progress,0%), #2c3946 0);
       animation:xcbb-glow 1.6s ease-in-out infinite;}
@@ -626,18 +630,6 @@
     }
     #xcbb-pill-count{position:absolute;bottom:1px;right:1px;background:#f4212e;color:#fff;
       font-size:8px;line-height:10px;padding:0 3px;border-radius:9999px;min-width:12px;text-align:center;}
-    /* 扫描完成结果对话框 */
-    #xcbb-result{position:fixed;inset:0;z-index:1000003;background:rgba(0,0,0,.55);
-      display:flex;align-items:center;justify-content:center;}
-    .xcbb-result-card{width:240px;background:#17212d;border:1px solid #33404f;border-radius:14px;
-      padding:18px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.5);}
-    .xcbb-result-title{font-size:13px;font-weight:600;color:#e7e9ea;margin-bottom:10px;}
-    .xcbb-result-num{font-size:14px;color:#c9d1d9;margin-bottom:4px;}
-    .xcbb-result-num b{color:#f4212e;font-size:22px;}
-    .xcbb-result-sub{font-size:11px;color:#9aa7b4;margin-bottom:14px;}
-    #xcbb-result button{background:#1d9bf0;color:#fff;border:none;border-radius:8px;
-      padding:5px 22px;font-size:12px;cursor:pointer;}
-    #xcbb-result button:hover{filter:brightness(1.15);}
     #xcbb-tpl-list,#xcbb-name-list{margin:6px 0;max-height:150px;overflow:auto;
       display:flex;flex-direction:column;gap:4px;}
     .xcbb-item{display:flex;align-items:center;gap:6px;background:#1e2a38;
@@ -1566,31 +1558,38 @@
     panel.classList.toggle('xcbb-dock-center', settings.dockPos === 'center');
     panel.classList.toggle('xcbb-dock-bottom', settings.dockPos === 'bottom');
   }
-  function toast(msg) {
-    let t = $('#xcbb-toast');
-    if (!t) { t = document.createElement('div'); t.id = 'xcbb-toast'; document.body.appendChild(t); }
-    t.textContent = msg;
-    t.classList.add('show');
-    clearTimeout(t._timer);
-    t._timer = setTimeout(() => t.classList.remove('show'), 2200);
+  // 右上角轻量通知(非模态不锁屏, 自动消失, 点击可关闭)
+  function notify(title, body, type, duration) {
+    let n = $('#xcbb-notify');
+    if (!n) { n = document.createElement('div'); n.id = 'xcbb-notify'; document.body.appendChild(n); }
+    n.className = 'show ' + (type || 'success');
+    n.innerHTML = '';
+    const t = document.createElement('div');
+    t.className = 'xcbb-notify-title';
+    t.textContent = title;
+    const b = document.createElement('div');
+    b.className = 'xcbb-notify-body';
+    b.textContent = body;
+    n.appendChild(t);
+    n.appendChild(b);
+    // 右上角定位: 面板/圆点在顶部时通知放到其下方, 避免遮挡
+    const r = panel.getBoundingClientRect();
+    const inFull = panel.classList.contains('xcbb-full');
+    let top = 8;
+    if (!inFull && r.top < 120 && r.bottom < window.innerHeight - 40) {
+      top = r.bottom + 8;
+    }
+    n.style.top = Math.max(8, top) + 'px';
+    clearTimeout(n._timer);
+    n._timer = setTimeout(() => n.classList.remove('show'), duration || 5000);
+    n.onclick = () => n.classList.remove('show');
   }
-  // 扫描完成结果对话框(封禁数量)
+  function toast(msg) {
+    notify(msg, '', 'info', 2200);
+  }
+  // 扫描完成通知(非模态, 右上角浅绿)
   function showScanResult() {
-    $('#xcbb-result')?.remove();
-    const box = document.createElement('div');
-    box.id = 'xcbb-result';
-    const card = document.createElement('div');
-    card.className = 'xcbb-result-card';
-    card.innerHTML = `
-      <div class="xcbb-result-title">✅ 扫描完成</div>
-      <div class="xcbb-result-num">封禁 <b>${statBlocked}</b> 个账号</div>
-      <div class="xcbb-result-sub">扫描 ${statScanned} · 疑似 ${statMatched}</div>
-      <button id="xcbb-result-close">知道了</button>`;
-    box.appendChild(card);
-    document.body.appendChild(box);
-    const close = () => box.remove();
-    card.querySelector('#xcbb-result-close').addEventListener('click', close);
-    box.addEventListener('click', (e) => { if (e.target === box) close(); });
+    notify('✅ 扫描完成', `封禁 ${statBlocked} 个账号 · 扫描 ${statScanned} · 疑似 ${statMatched}`, 'success', 5000);
   }
   el('xcbb-min').addEventListener('click', () => {
     // 收起前清掉拖拽偏移, 让圆点停靠屏幕右侧垂直居中
@@ -1757,7 +1756,7 @@
     }
   }
 
-  const VER = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '0.12.8';
+  const VER = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '0.12.9';
   el('xcbb-ver').textContent = 'v' + VER;
   // 日志默认折叠(平时只看统计; 有新内容时显示未读角标)
   logEl.classList.add('hidden');
