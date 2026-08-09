@@ -2,10 +2,10 @@
 // @name          X 评论机器人屏蔽器
 // @name:en       X Comment Bot Blocker
 // @namespace     xcbb
-// @version       0.12.7
+// @version       0.12.8
 // @description   选取"机器人模板评论"或"不合理用户名(昵称/@handle)",一键扫描当前推文评论区,文本相似或用户名命中其一即自动屏蔽对应账号。内置约炮引流类高频规则模板(一键加载)、高频特征词挖掘、数据导出/导入,支持相似度阈值、白名单、试运行(仅标记)模式。
 // @description:en Select bot template comments, scan the current tweet's replies for similar text, and auto-block those accounts.
-// @author        you
+// @author        kikuxdev
 // @match         https://x.com/*
 // @match         https://twitter.com/*
 // @icon          https://www.google.com/s2/favicons?domain=x.com
@@ -15,6 +15,7 @@
 // @grant         GM_addElement
 // @grant         GM_xmlhttpRequest
 // @grant         GM_addStyle
+// @grant         GM_registerMenuCommand
 // @run-at        document-idle
 // @license       MIT
 // @updateURL     https://raw.githubusercontent.com/kikuxdev/X-Comment-Bot-Blocker/main/x-comment-bot-blocker.user.js
@@ -1756,7 +1757,7 @@
     }
   }
 
-  const VER = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '0.12.7';
+  const VER = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '0.12.8';
   el('xcbb-ver').textContent = 'v' + VER;
   // 日志默认折叠(平时只看统计; 有新内容时显示未读角标)
   logEl.classList.add('hidden');
@@ -1770,17 +1771,10 @@
   if (settings.autoSync && settings.remoteUrl) {
     setTimeout(() => fetchRemoteJson('auto'), 3000);
   }
-  // Tampermonkey 菜单命令(点 TM 图标 → 脚本名 → 菜单)
+  // Tampermonkey 菜单命令(点 TM 图标 → 脚本名 → 菜单; 精简为两项, 其余功能在面板内)
   try {
-    GM_registerMenuCommand('▶ 开始扫描', () => { restorePanel(); showSettings(false); runScan(); });
-    GM_registerMenuCommand('⏹ 停止扫描', () => { stopFlag = true; log('⏹ 正在停止…'); });
-    GM_registerMenuCommand('🧹 清理无效模板', () => {
-      const n = cleanInvalidTemplates();
-      toast(n > 0 ? `🧹 已清理 ${n} 条无效模板` : '🧹 无无效模板');
-    });
-    GM_registerMenuCommand('📡 同步数据', () => fetchRemoteJson('manual'));
-    GM_registerMenuCommand('🏠 显示面板', () => { restorePanel(); showSettings(false); });
-    GM_registerMenuCommand('⚙ 打开设置', () => { restorePanel(); showSettings(true); });
+    GM_registerMenuCommand('⚡ 快速扫描', () => { restorePanel(); showSettings(false); runScan(); });
+    GM_registerMenuCommand('⚙ 进入设置', () => { restorePanel(); showSettings(true); });
   } catch (e) { /* 非 Tampermonkey 环境时忽略 */ }
   renderTemplates();
   renderBadnames();
