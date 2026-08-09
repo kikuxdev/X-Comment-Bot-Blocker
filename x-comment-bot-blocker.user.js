@@ -2,7 +2,7 @@
 // @name          X 评论机器人屏蔽器
 // @name:en       X Comment Bot Blocker
 // @namespace     xcbb
-// @version       0.12.9
+// @version       0.12.10
 // @description   选取"机器人模板评论"或"不合理用户名(昵称/@handle)",一键扫描当前推文评论区,文本相似或用户名命中其一即自动屏蔽对应账号。内置约炮引流类高频规则模板(一键加载)、高频特征词挖掘、数据导出/导入,支持相似度阈值、白名单、试运行(仅标记)模式。
 // @description:en Select bot template comments, scan the current tweet's replies for similar text, and auto-block those accounts.
 // @author        kikuxdev
@@ -1756,7 +1756,7 @@
     }
   }
 
-  const VER = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '0.12.9';
+  const VER = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '0.12.10';
   el('xcbb-ver').textContent = 'v' + VER;
   // 日志默认折叠(平时只看统计; 有新内容时显示未读角标)
   logEl.classList.add('hidden');
@@ -1772,7 +1772,11 @@
   }
   // Tampermonkey 菜单命令(点 TM 图标 → 脚本名 → 菜单; 精简为两项, 其余功能在面板内)
   try {
-    GM_registerMenuCommand('⚡ 快速扫描', () => { restorePanel(); showSettings(false); runScan(); });
+    GM_registerMenuCommand('⚡ 快速扫描', () => {
+      // 保持当前面板状态: 收起时=圆点直扫(进度环+通知), 展开时=面板统计; 不强制展开矩形面板
+      if (running) { toast('⏳ 扫描进行中, 请稍候'); return; }
+      runScan();
+    });
     GM_registerMenuCommand('⚙ 进入设置', () => { restorePanel(); showSettings(true); });
   } catch (e) { /* 非 Tampermonkey 环境时忽略 */ }
   renderTemplates();
