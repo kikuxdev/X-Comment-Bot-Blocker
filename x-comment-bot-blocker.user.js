@@ -2,7 +2,7 @@
 // @name          X 评论机器人屏蔽器
 // @name:en       X Comment Bot Blocker
 // @namespace     xcbb
-// @version       0.12.13
+// @version       0.12.14
 // @description   选取"机器人模板评论"或"不合理用户名(昵称/@handle)",一键扫描当前推文评论区,文本相似或用户名命中其一即自动屏蔽对应账号。内置约炮引流类高频规则模板(一键加载)、高频特征词挖掘、数据导出/导入,支持相似度阈值、白名单、试运行(仅标记)模式。
 // @description:en Select bot template comments, scan the current tweet's replies for similar text, and auto-block those accounts.
 // @author        kikuxdev
@@ -294,6 +294,7 @@
   /* ================= 扫描 ================= */
   const seen = new Set();        // 本轮已处理的文章节点(单次扫描内去重)
   const processed = new Set();   // 会话级去重: 已评估过的评论 (handle/tweetId), 跨扫描保留, 刷新页面重置
+  const pending = [];            // 待复核: 首轮疑似数据不完整的未命中评论(有界, 扫描结束二次评估)
   let scanUri = null;            // 扫描开始时的 URI, 用于检测 SPA 页面切换
   const blockedHandles = new Set(); // 已屏蔽/已在黑名单的用户
   let whitelist = new Set();
@@ -435,16 +436,16 @@
     if (!addedLow && !addedMed) log('ℹ 内置规则都已存在于名单');
   }
 
-  async function processArticle(article) {
+  async function processArticle(article, force) {
     if (isQuote(article)) return;
     const author = getAuthorInfo(article);
     const handle = author.handle;
     if (!handle) return;
     const h = handle.toLowerCase();
-    // 会话级去重放在最前: 每条评论只评估一次(与是否命中白名单无关, 保证闲置检测可靠)
+    // 会话级去重: 每条评论默认只评估一次; force(二次复核)时绕过
     const tweetId = getTweetId(article);
     const dedupeKey = `${h}/${tweetId || ''}`;
-    if (tweetId && processed.has(dedupeKey)) return;
+    if (tweetId && processed.has(dedupeKey) && !force) return;
     if (tweetId) processed.add(dedupeKey);
 
     if (whitelist.has(h) || h === urlOwner) return;
@@ -472,7 +473,13 @@
         if (nameMatches(norm, en.d)) { kwHit = en.d; break; }
       }
     }
-    if (!textHit && !nameHit && !kwHit) return;
+    if (!textHit && !nameHit && !kwHit) {
+      // 疑似数据不完整(缺昵称/文本过短)的未命中评论 → 留待扫描结束二次复核, 解决"刷新后才能识别"
+      if (tweetId && !force && pending.length < 500 && (!author.name || norm.length < 40)) {
+        pending.push({ article, h });
+      }
+      return;
+    }
 
     const hitInfo = [
       textHit ? `相似度 ${best.toFixed(2)} 模板#${bestIdx + 1}` : null,
@@ -541,7 +548,7 @@
     notify('⏳ 扫描进行中', '正在扫描评论区, 请稍候…', 'info', 3000); // 开始即弹进行中通知(~3s)
 
     try {
-    let idle = 0, lastScrollY = window.scrollY;
+    let idle = 0, lastHeight = document.body.scrollHeight;
     for (let round = 0; round < settings.maxRounds && running && !stopFlag; round++) {
       if (scanUri !== location.href) { // SPA 页面切换 → 立即停止, 不碰新页面的评论
         log('⏹ 检测到页面切换, 扫描已停止(只处理当前页面)');
@@ -569,16 +576,26 @@
         break;
       }
       const roundNew = processed.size - before;
-      const scrolled = window.scrollY !== lastScrollY;
-      lastScrollY = window.scrollY;
-      // 仍在滚动(懒加载进行中)时不累计闲置; 滚不动且无新增才算闲置 → 修复扫描提前停止
-      if (roundNew === 0 && !scrolled) idle++; else idle = 0;
+      const pageGrew = document.body.scrollHeight !== lastHeight;
+      lastHeight = document.body.scrollHeight;
+      // 页面仍在变高(懒加载/展开进行中)不累计闲置; 页面不再变化且无新增才算闲置 → 修复底部自动加载被误判停止
+      if (roundNew === 0 && !pageGrew) idle++; else idle = 0;
       updateUI();
       panel.style.setProperty('--xcbb-progress', Math.round(((round + 1) / settings.maxRounds) * 100) + '%');
       if (idle >= settings.idleStopRounds) {
         log('⏹ 连续多轮无新评论, 自动停止');
         break;
       }
+    }
+    // 二次复核: 首轮疑似数据不完整的未命中评论, 用最新 DOM 数据重新评估(等价于刷新后的重扫)
+    if (!stopFlag && pending.length) {
+      const n = pending.length;
+      const before = statMatched;
+      for (const p of pending) await processArticle(p.article, true);
+      pending.length = 0;
+      const newHits = statMatched - before;
+      if (newHits > 0) log(`🔁 二次复核 ${n} 条, 新命中 ${newHits} 条`);
+      updateUI();
     }
     } catch (e) {
       log(`⚠ 扫描异常已兜底: ${(e && e.message) || e}`);
@@ -1786,7 +1803,7 @@
     }
   }
 
-  const VER = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '0.12.13';
+  const VER = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '0.12.14';
   el('xcbb-ver').textContent = 'v' + VER;
   // 日志默认折叠(平时只看统计; 有新内容时显示未读角标)
   logEl.classList.add('hidden');
