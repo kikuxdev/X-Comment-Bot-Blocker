@@ -2,7 +2,7 @@
 // @name          X 评论机器人屏蔽器
 // @name:en       X Comment Bot Blocker
 // @namespace     xcbb
-// @version       0.12.12
+// @version       0.12.13
 // @description   选取"机器人模板评论"或"不合理用户名(昵称/@handle)",一键扫描当前推文评论区,文本相似或用户名命中其一即自动屏蔽对应账号。内置约炮引流类高频规则模板(一键加载)、高频特征词挖掘、数据导出/导入,支持相似度阈值、白名单、试运行(仅标记)模式。
 // @description:en Select bot template comments, scan the current tweet's replies for similar text, and auto-block those accounts.
 // @author        kikuxdev
@@ -538,6 +538,7 @@
     panel.style.setProperty('--xcbb-progress', '0%');
     updateUI();
     log(`▶ 开始扫描 | 阈值 ${settings.threshold.toFixed(2)} | ${settings.autoBlock ? '自动屏蔽' : '仅标记(试运行)'} | 模板 ${templates.length} 条 / 用户名 ${badnames.length} 条${settings.commentKeywords ? ' | 评论关键词匹配开' : ''}${processed.size ? ` | 已评估 ${processed.size} 条, 本次仅处理新增(刷新页面可重置)` : ''}`);
+    notify('⏳ 扫描进行中', '正在扫描评论区, 请稍候…', 'info', 3000); // 开始即弹进行中通知(~3s)
 
     try {
     let idle = 0, lastScrollY = window.scrollY;
@@ -1576,20 +1577,23 @@
     panel.classList.toggle('xcbb-dock-center', settings.dockPos === 'center');
     panel.classList.toggle('xcbb-dock-bottom', settings.dockPos === 'bottom');
   }
-  // 右上角轻量通知(非模态不锁屏, 自动消失, 点击可关闭)
+  // 右上角轻量通知: 单元素+内部节点一次性创建, 之后仅更新文本(零DOM分配复用)
   function notify(title, body, type, duration) {
     let n = $('#xcbb-notify');
-    if (!n) { n = document.createElement('div'); n.id = 'xcbb-notify'; document.body.appendChild(n); }
+    if (!n) {
+      n = document.createElement('div');
+      n.id = 'xcbb-notify';
+      n._title = document.createElement('div');
+      n._title.className = 'xcbb-notify-title';
+      n._body = document.createElement('div');
+      n._body.className = 'xcbb-notify-body';
+      n.appendChild(n._title);
+      n.appendChild(n._body);
+      document.body.appendChild(n);
+    }
     n.className = 'show ' + (type || 'success');
-    n.innerHTML = '';
-    const t = document.createElement('div');
-    t.className = 'xcbb-notify-title';
-    t.textContent = title;
-    const b = document.createElement('div');
-    b.className = 'xcbb-notify-body';
-    b.textContent = body;
-    n.appendChild(t);
-    n.appendChild(b);
+    n._title.textContent = title;
+    n._body.textContent = body;
     // 右上角定位: 面板/圆点在顶部时通知放到其下方, 避免遮挡
     const r = panel.getBoundingClientRect();
     const inFull = panel.classList.contains('xcbb-full');
@@ -1782,7 +1786,7 @@
     }
   }
 
-  const VER = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '0.12.12';
+  const VER = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '0.12.13';
   el('xcbb-ver').textContent = 'v' + VER;
   // 日志默认折叠(平时只看统计; 有新内容时显示未读角标)
   logEl.classList.add('hidden');
