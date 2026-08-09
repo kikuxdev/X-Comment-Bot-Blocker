@@ -41,7 +41,7 @@
     autoSync: true,        // 启动时自动拉取远程数据源(仅内容变化时合并)
     silentBlock: true,     // 静默屏蔽: 隐藏 X 菜单/确认弹层, 扫描不打断阅读
     dockPos: 'center',     // 圆点停靠位置: top | center | bottom
-    remoteUrl: '' // 远程数据源(gist raw)
+    remoteUrl: 'https://gist.githubusercontent.com/kikuxdev/715fb25206eb0291007144aaa4183288/raw/spam-blocks.json' // 远程数据源(公开 gist 稳定 URL, 不随内容编辑变化; 私有数据源请自行覆盖)
   };
   let settings = Object.assign({}, DEFAULTS, GM_getValue('xcbb_settings', {}));
   // 模板: [{ n: 归一化文本, o: 原文预览 }]
