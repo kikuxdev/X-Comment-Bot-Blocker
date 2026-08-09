@@ -76,5 +76,6 @@
 - **AGENTS.md**:面向后续 AI agent 的开发上手指南(工作流/隐私红线/已知缺口/Pros & Cons);
 - **tests/ 入仓**:评论关键词(39 断言)与屏蔽记录(17 断言)逻辑测试迁入仓库,`node tests/*.test.mjs` 直接运行;
 - **GREASYFORK.md**:GreasyFork 发布文档(元数据/简介/长描述/更新日志/检查清单);
+- **PROMO.md / TWEETS.md**:宣传物料文案(3 图区块、一句话简介三版)+ X 推文/推文串文案(主推文三版、8 条 thread、互动备选);
 - **README 全面重写**:执行图示、功能详解与实现依据、数据导出专章;
 - 数据源 URL 隐私处理:全历史清除 secret gist URL,默认值仅内置公开稳定数据源。

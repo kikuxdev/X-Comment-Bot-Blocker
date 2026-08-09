@@ -11,7 +11,7 @@
 | 脚本名称 | X 评论机器人屏蔽器 |
 | 名称(英文) | X Comment Bot Blocker |
 | 命名空间 namespace | `xcbb` |
-| 版本 version | `0.14.2` |
+| 版本 version | `0.14.3` |
 | 许可 license | MIT |
 | 匹配 match | `https://x.com/*`, `https://twitter.com/*` |
 | 作者 | kikuxdev |
@@ -97,6 +97,7 @@
 ## 四、更新日志(可贴在 About 底部)
 
 ```
+v0.14.3  内置公开 gist 为默认远程数据源,自动同步开箱即用
 v0.14.2  屏蔽记录卡片独立导出(blocklog.json)+ 数据页实时刷新
 v0.14.1  修复扫描通知条淡出后拦截点击(⚙/🗕 按钮失效)
 v0.14.0  新增近期屏蔽记录:误伤可追溯、可导出、可同步、白名单防重锁
@@ -106,7 +107,7 @@ v0.13.0  评论关键词独立列表(修复普通词误屏蔽)+ 护眼浅色主�
 
 ## 五、提交检查清单
 
-- [ ] 代码区粘贴最新 `x-comment-bot-blocker.user.js`(头部元数据完整:version 0.14.2 / license MIT / namespace xcbb)
+- [ ] 代码区粘贴最新 `x-comment-bot-blocker.user.js`(头部元数据完整:version 0.14.3 / license MIT / namespace xcbb)
 - [ ] 简介使用第二节文本(与脚本 @description 一致)
 - [ ] About 区粘贴第三节 HTML 长描述
 - [ ] 更新日志粘贴到 About 底部(可选)
