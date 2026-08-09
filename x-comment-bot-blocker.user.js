@@ -56,6 +56,17 @@
   // 评论关键词(独立于用户名名单, 仅用于评论文本匹配): 字符串数组
   let commentKws = GM_getValue('xcbb_comment_kws', []);
   const saveCommentKws = () => GM_setValue('xcbb_comment_kws', commentKws);
+  // 屏蔽记录(误伤追溯/手动解封入口): [{ h: handle, n: 昵称, t: 时间戳, r: 命中原因 }], 按 handle 去重, 上限 300
+  let blocklog = GM_getValue('xcbb_blocklog', []);
+  const saveBlocklog = () => {
+    if (blocklog.length > 300) blocklog = blocklog.slice(-300);
+    GM_setValue('xcbb_blocklog', blocklog);
+  };
+  const logBlock = (h, n, r) => {
+    blocklog = blocklog.filter((b) => b.h !== h); // 同一账号只保留最新记录
+    blocklog.push({ h, n: n || '', t: Date.now(), r: r || '' });
+    saveBlocklog();
+  };
   // 已确认垃圾账号语料(用于挖掘高频特征词): [{ d: 昵称, h: handle }]
   let corpus = GM_getValue('xcbb_corpus', []);
   const saveCorpus = () => {
@@ -515,6 +526,7 @@
         blockedHandles.add(h);
         statBlocked++;
         recordCorpus(author.name, handle); // 实际屏蔽的账号计入语料
+        logBlock(h, author.name, hitInfo); // 写入屏蔽记录(数据页可追溯/手动解封)
         log(`⛔ 已屏蔽 ${who} | ${hitInfo} | "${preview}"`);
       } else if (r === 'already') {
         blockedHandles.add(h);
@@ -697,7 +709,7 @@
     }
     #xcbb-pill-count{position:absolute;bottom:1px;right:1px;background:var(--xcbb-danger);color:#fff;
       font-size:8px;line-height:10px;padding:0 3px;border-radius:9999px;min-width:12px;text-align:center;}
-    #xcbb-tpl-list,#xcbb-name-list{margin:6px 0;max-height:150px;overflow:auto;
+    #xcbb-tpl-list,#xcbb-name-list,#xcbb-blocklog-list{margin:6px 0;max-height:150px;overflow:auto;
       display:flex;flex-direction:column;gap:4px;}
     .xcbb-item{display:flex;align-items:center;gap:6px;background:var(--xcbb-card);
       border:1px solid var(--xcbb-border);border-radius:8px;padding:4px 8px;font-size:12px;
@@ -959,6 +971,15 @@
               </div>
             </div>
           </section>
+          <section class="xcbb-card">
+            <div class="flex items-center gap-1.5 mb-1.5 flex-wrap">
+              <h3 class="xcbb-section-title">近期屏蔽记录</h3>
+              <span class="flex-1"></span>
+              <button id="xcbb-blocklog-clear" class="ghost tiny" title="清空全部屏蔽记录(不影响已屏蔽的账号)">清空</button>
+            </div>
+            <p class="text-[11px] xcbb-dim mb-1.5 leading-relaxed">脚本屏蔽的账号留痕于此, 误伤可追溯: 🏠 打开对方主页手动解除屏蔽, ✓ 加入白名单防止下次再锁。</p>
+            <div id="xcbb-blocklog-list"></div>
+          </section>
         </div>
         <div id="xcbb-panel-opt" class="flex-1 min-h-0 overflow-auto hidden">
           <section class="xcbb-card">
@@ -1218,6 +1239,56 @@
     if (!quiet) log(`✔ 已添加: ${d}${h ? ` (@${h})` : ''}`);
   }
 
+  /* ---- 屏蔽记录(误伤追溯 / 手动解封入口) ---- */
+  function renderBlocklog() {
+    const list = el('xcbb-blocklog-list');
+    list.innerHTML = '';
+    if (!blocklog.length) {
+      list.innerHTML = '<div class="xcbb-empty">暂无记录 — 脚本屏蔽账号后会记录在这里</div>';
+      return;
+    }
+    const items = [...blocklog].reverse(); // 最新在前
+    for (const b of items) {
+      const row = document.createElement('div');
+      row.className = 'xcbb-item';
+      row.title = b.r ? `命中: ${b.r}` : '屏蔽记录';
+      const txt = document.createElement('span');
+      txt.className = 'txt';
+      const t = new Date(b.t);
+      const time = `${t.getMonth() + 1}/${t.getDate()} ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+      txt.textContent = `${b.n ? b.n + ' ' : ''}@${b.h} · ${time}`;
+      const home = document.createElement('button');
+      home.textContent = '🏠';
+      home.title = '打开对方主页(在此手动解除屏蔽)';
+      home.addEventListener('click', () => { window.open('https://x.com/' + b.h, '_blank'); });
+      const wl = document.createElement('button');
+      wl.textContent = '✓';
+      wl.title = '加入白名单(后续扫描不再处理该账号)';
+      wl.addEventListener('click', () => {
+        const cur = new Set(parseWhitelist());
+        if (cur.has(b.h)) { log(`ℹ @${b.h} 已在白名单`); return; }
+        cur.add(b.h);
+        settings.whitelist = [...cur].join('\n');
+        saveSettings();
+        updateUI();
+        log(`✔ @${b.h} 已加入白名单`);
+      });
+      const del = document.createElement('button');
+      del.textContent = '✕';
+      del.title = '从记录中删除';
+      del.addEventListener('click', () => {
+        blocklog = blocklog.filter((x) => x.h !== b.h);
+        saveBlocklog();
+        renderBlocklog();
+      });
+      row.appendChild(txt);
+      row.appendChild(home);
+      row.appendChild(wl);
+      row.appendChild(del);
+      list.appendChild(row);
+    }
+  }
+
   /* ---- 导入 / 导出(与作者/AI 协作) ---- */
   function exportData() {
     const lines = [];
@@ -1248,6 +1319,7 @@
       templates: templates.map((t) => t.o),
       badnames: badnames.map((en) => (en.h ? { d: en.d, h: en.h } : { d: en.d })),
       commentKws: commentKws,
+      blocklog: blocklog.map((b) => ({ h: b.h, n: b.n, t: b.t, r: b.r })),
       corpus: corpus.map((c) => ({ d: c.d, h: c.h }))
     }, null, 2);
   }
@@ -1264,7 +1336,7 @@
 
   // 合并 JSON 数据(去重, 不覆盖) — 供本地文件导入与远程拉取共用
   function mergeJsonData(data) {
-    let nTpl = 0, nBad = 0, nCor = 0, nKw = 0;
+    let nTpl = 0, nBad = 0, nCor = 0, nKw = 0, nBlk = 0;
     if (Array.isArray(data.templates)) {
       for (const o of data.templates) {
         const n = normalize(String(o));
@@ -1291,6 +1363,20 @@
         if (k && !commentKws.includes(k)) { commentKws.push(k); nKw++; }
       }
     }
+    if (Array.isArray(data.blocklog)) {
+      // 按 handle 合并去重, 保留最新时间戳; 时间升序与 logBlock 追加顺序一致
+      const have = new Map(blocklog.map((b) => [b.h, b]));
+      for (const b of data.blocklog) {
+        const h = String((b && b.h) || '').toLowerCase();
+        if (!h) continue;
+        const nb = { h, n: String((b && b.n) || ''), t: Number((b && b.t) || 0) || Date.now(), r: String((b && b.r) || '') };
+        const old = have.get(h);
+        if (!old || nb.t > old.t) { have.set(h, nb); nBlk++; }
+      }
+      blocklog = [...have.values()].sort((a, b) => a.t - b.t);
+      if (blocklog.length > 300) blocklog = blocklog.slice(-300);
+      saveBlocklog();
+    }
     if (Array.isArray(data.corpus)) {
       for (const c of data.corpus) {
         const d = String((c && c.d) || '');
@@ -1309,7 +1395,7 @@
     renderBadnames();
     renderFreq();
     updateOverview();
-    return { nTpl, nBad, nCor, nKw };
+    return { nTpl, nBad, nCor, nKw, nBlk };
   }
 
   function importJsonFile(file) {
@@ -1319,7 +1405,7 @@
         const data = JSON.parse(reader.result);
         if (!data || typeof data !== 'object') throw new Error('文件不是 JSON 对象');
         const r = mergeJsonData(data);
-        log(`✔ JSON 导入成功: 模板 +${r.nTpl} / 名单 +${r.nBad} / 关键词 +${r.nKw} / 语料 +${r.nCor} (合并去重)`);
+        log(`✔ JSON 导入成功: 模板 +${r.nTpl} / 名单 +${r.nBad} / 关键词 +${r.nKw} / 屏蔽记录 +${r.nBlk} / 语料 +${r.nCor} (合并去重)`);
       } catch (e) {
         log(`⚠ JSON 解析失败: ${e.message}`);
       }
@@ -1359,7 +1445,7 @@
           totals.lastHash = hashStr(raw);
           saveTotals();
           updateOverview();
-          log(`✔ 远程同步${mode === 'auto' ? '(自动, 检测到更新)' : ''}: 模板 +${r.nTpl} / 名单 +${r.nBad} / 关键词 +${r.nKw} / 语料 +${r.nCor} (合并去重)`);
+          log(`✔ 远程同步${mode === 'auto' ? '(自动, 检测到更新)' : ''}: 模板 +${r.nTpl} / 名单 +${r.nBad} / 关键词 +${r.nKw} / 屏蔽记录 +${r.nBlk} / 语料 +${r.nCor} (合并去重)`);
         } catch (e) {
           if (mode === 'manual') log(`⚠ 远程拉取失败: ${e.message}`);
         }
@@ -1546,6 +1632,15 @@
     e.target.value = '';
   });
   el('xcbb-remote-pull').addEventListener('click', pullRemoteJson);
+  el('xcbb-blocklog-clear').addEventListener('click', () => {
+    if (!blocklog.length) return;
+    if (confirm('清空全部屏蔽记录? (不影响已屏蔽的账号)')) {
+      blocklog = [];
+      saveBlocklog();
+      renderBlocklog();
+      log('✔ 屏蔽记录已清空');
+    }
+  });
   el('xcbb-autosync').addEventListener('change', (e) => {
     settings.autoSync = e.target.checked;
     saveSettings();
@@ -1795,6 +1890,7 @@
     if (tab === 'tpl') renderTemplates();
     else if (tab === 'names') renderBadnames();
     else if (tab === 'freq') renderFreq();
+    else if (tab === 'data') renderBlocklog();
   }
   for (const b of document.querySelectorAll('#xcbb-tabbar .xcbb-tab')) {
     b.addEventListener('click', () => switchTab(b.dataset.tab));
