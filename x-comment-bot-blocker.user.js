@@ -2,7 +2,7 @@
 // @name          X 评论机器人屏蔽器
 // @name:en       X Comment Bot Blocker
 // @namespace     xcbb
-// @version       0.12.0
+// @version       0.12.3
 // @description   选取"机器人模板评论"或"不合理用户名(昵称/@handle)",一键扫描当前推文评论区,文本相似或用户名命中其一即自动屏蔽对应账号。内置约炮引流类高频规则模板(一键加载)、高频特征词挖掘、数据导出/导入,支持相似度阈值、白名单、试运行(仅标记)模式。
 // @description:en Select bot template comments, scan the current tweet's replies for similar text, and auto-block those accounts.
 // @author        you
@@ -38,6 +38,8 @@
     whitelist: '',         // 每行一个用户名, 不处理
     panelCollapsed: false, // 面板收起状态记忆(刷新后保持)
     autoSync: true,        // 启动时自动拉取远程数据源(仅内容变化时合并)
+    silentBlock: true,     // 静默屏蔽: 隐藏 X 菜单/确认弹层, 扫描不打断阅读
+    dockPos: 'center',     // 圆点停靠位置: top | center | bottom
     remoteUrl: '' // 远程数据源(gist raw)
   };
   let settings = Object.assign({}, DEFAULTS, GM_getValue('xcbb_settings', {}));
@@ -252,30 +254,36 @@
     root.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
   }
 
-  // 通过 UI 屏蔽文章作者; 返回 'ok' | 'already' | 'nomenu' | 'fail'
+  // 通过 UI 屏蔽文章作者; 返回 'ok' | 'already' | 'nomenu' | 'fail' | 'unverified'
   async function blockViaUi(article) {
-    const moreBtn =
-      $('[aria-haspopup="menu"][role="button"]', article) ||
-      $('[data-testid="caret"]', article) ||
-      $('[aria-label="More"], [aria-label="更多"]', article);
-    if (!moreBtn) return 'nomenu';
-    moreBtn.click();
-    const menu = await waitFor(() => $('[role="menu"]'), 2500);
-    if (!menu) return 'fail';
-    if (findUnblockMenuItem()) { pressEscape(); return 'already'; }
-    const blockItem = findBlockMenuItem();
-    if (!blockItem) { pressEscape(); return 'fail'; }
-    blockItem.click();
-    const confirmBtn = await waitFor(findConfirmButton, 2500);
-    if (!confirmBtn) { pressEscape(); return 'fail'; }
-    confirmBtn.click();
-    // 验证(分两级): ①推文被移除=确定成功; ②确认弹窗已关闭=请求已受理
-    // (X 有时延迟移除推文需刷新才消失, 弹窗关闭即可视为成功; 弹窗仍在=未生效)
-    const removed = await waitFor(() => !article.isConnected, 1500);
-    if (removed) return 'ok';
-    await sleep(300);
-    if (!document.querySelector('[data-testid="confirmationSheetConfirm"]')) return 'ok';
-    return 'unverified';
+    const silent = settings.silentBlock;
+    if (silent) document.documentElement.classList.add('xcbb-silent'); // 隐藏弹层, 减少阅读干扰
+    try {
+      const moreBtn =
+        $('[aria-haspopup="menu"][role="button"]', article) ||
+        $('[data-testid="caret"]', article) ||
+        $('[aria-label="More"], [aria-label="更多"]', article);
+      if (!moreBtn) return 'nomenu';
+      moreBtn.click();
+      const menu = await waitFor(() => $('[role="menu"]'), 2500);
+      if (!menu) return 'fail';
+      if (findUnblockMenuItem()) { pressEscape(); return 'already'; }
+      const blockItem = findBlockMenuItem();
+      if (!blockItem) { pressEscape(); return 'fail'; }
+      blockItem.click();
+      const confirmBtn = await waitFor(findConfirmButton, 2500);
+      if (!confirmBtn) { pressEscape(); return 'fail'; }
+      confirmBtn.click();
+      // 验证(分两级): ①推文被移除=确定成功; ②确认弹窗已关闭=请求已受理
+      // (X 有时延迟移除推文需刷新才消失, 弹窗关闭即可视为成功; 弹窗仍在=未生效)
+      const removed = await waitFor(() => !article.isConnected, 1500);
+      if (removed) return 'ok';
+      await sleep(300);
+      if (!document.querySelector('[data-testid="confirmationSheetConfirm"]')) return 'ok';
+      return 'unverified';
+    } finally {
+      if (silent) document.documentElement.classList.remove('xcbb-silent');
+    }
   }
 
   /* ================= 扫描 ================= */
@@ -585,14 +593,29 @@
     #xcbb-panel button.danger{background:#f4212e;}
     #xcbb-panel button.tiny{padding:0 6px;font-size:10.5px;border-radius:6px;}
     #xcbb-panel input[type=checkbox]{accent-color:#1d9bf0;}
-    /* 收起为圆点(停靠屏幕右侧垂直居中) */
-    #xcbb-panel.xcbb-collapsed{width:44px;height:44px;border-radius:9999px;overflow:hidden;cursor:pointer;
-      right:0;top:50%;transform:translateY(-50%);}
+    /* 收起为圆点(停靠屏幕右侧, 位置可在右键菜单中选 上/中/下) */
+    #xcbb-panel.xcbb-collapsed{width:44px;height:44px;border-radius:9999px;overflow:hidden;cursor:pointer;right:0;}
+    #xcbb-panel.xcbb-collapsed.xcbb-dock-top{top:12px;transform:none;}
+    #xcbb-panel.xcbb-collapsed.xcbb-dock-center{top:50%;transform:translateY(-50%);}
+    #xcbb-panel.xcbb-collapsed.xcbb-dock-bottom{top:auto;bottom:12px;transform:none;}
     #xcbb-panel.xcbb-collapsed #xcbb-body,
     #xcbb-panel.xcbb-collapsed #xcbb-header{display:none;}
     #xcbb-collapsed-icon{display:none;position:absolute;inset:0;align-items:center;
       justify-content:center;font-size:20px;line-height:1;pointer-events:none;}
     #xcbb-panel.xcbb-collapsed #xcbb-collapsed-icon{display:flex;}
+    /* 圆点右键快捷菜单 */
+    #xcbb-ctx{position:fixed;z-index:1000001;width:158px;background:#17212d;border:1px solid #33404f;
+      border-radius:10px;padding:4px;box-shadow:0 8px 24px rgba(0,0,0,.5);}
+    #xcbb-ctx button{display:flex;align-items:center;gap:6px;width:100%;background:transparent;border:none;
+      color:#c9d1d9;font-size:11.5px;padding:6px 8px;border-radius:6px;cursor:pointer;text-align:left;
+      transition:background .15s ease;}
+    #xcbb-ctx button:hover{background:#1e2a38;}
+    #xcbb-ctx button.active{color:#1d9bf0;background:#12293f;}
+    #xcbb-ctx .xcbb-ctx-title{font-size:9.5px;color:#6e767d;text-transform:uppercase;letter-spacing:.05em;
+      padding:5px 8px 2px;}
+    #xcbb-ctx .xcbb-ctx-dock{display:flex;gap:4px;padding:0 8px 6px;}
+    #xcbb-ctx .xcbb-ctx-dock button{justify-content:center;padding:3px 0;border:1px solid #2c3946;}
+    #xcbb-ctx .xcbb-ctx-dock button:hover{border-color:#1d9bf0;}
     #xcbb-tpl-list,#xcbb-name-list{margin:6px 0;max-height:150px;overflow:auto;
       display:flex;flex-direction:column;gap:4px;}
     .xcbb-item{display:flex;align-items:center;gap:6px;background:#1e2a38;
@@ -662,6 +685,9 @@
     #xcbb-log-head{border-radius:6px;cursor:pointer;transition:background .15s ease;}
     #xcbb-log-head:hover{background:#1b2633;}
     .xcbb-dim{color:#9aa7b4;}
+    /* 静默屏蔽: 脚本执行屏蔽的窗口期内隐藏 X 的菜单与确认弹层(点击照常, 视觉无感) */
+    html.xcbb-silent [role="menu"],
+    html.xcbb-silent [role="alertdialog"]{visibility:hidden !important;}
     .xcbb-card{background:#1b2633;border:1px solid #31404f;border-radius:10px;padding:8px 10px;}
     .xcbb-section-title{font-size:11px;font-weight:600;color:#c9d1d9;letter-spacing:.02em;}
     .xcbb-count-badge{background:#2c3946;color:#9aa7b4;border-radius:9999px;font-size:10px;
@@ -864,6 +890,9 @@
             </label>
             <label class="flex items-center gap-1.5 text-[11px] mt-1 text-[#c9d1d9]" title="评论文本含名单关键词(如约炮/福利)即命中; 名单里的中风险词(同城/附近)可能误伤正常评论, 建议先仅标记验证">
               <input id="xcbb-commentkw" type="checkbox"> 评论关键词匹配
+            </label>
+            <label class="flex items-center gap-1.5 text-[11px] mt-1 text-[#c9d1d9]" title="屏蔽时隐藏 X 的菜单/确认弹层, 扫描不打断阅读">
+              <input id="xcbb-silent" type="checkbox"> 静默屏蔽(不显示确认弹窗)
             </label>
             <div class="flex items-center justify-between mt-2" title="每次屏蔽之间的间隔, 防风控, 建议≥1000ms">
               <span class="text-[11px] text-[#c9d1d9]">屏蔽间隔</span>
@@ -1445,6 +1474,10 @@
     settings.commentKeywords = e.target.checked;
     saveSettings();
   });
+  el('xcbb-silent').addEventListener('change', (e) => {
+    settings.silentBlock = e.target.checked;
+    saveSettings();
+  });
   el('xcbb-white').addEventListener('change', (e) => {
     settings.whitelist = e.target.value;
     saveSettings();
@@ -1469,9 +1502,62 @@
     panel.style.top = '';
     panel.style.right = '';
     panel.style.transform = '';
+    panel.title = ''; // 清除圆点操作提示
     settings.panelCollapsed = false; // 记忆展开状态
     saveSettings();
   }
+
+  /* ---- 圆点停靠位置 + 右键快捷菜单 ---- */
+  function applyDock() {
+    panel.classList.toggle('xcbb-dock-top', settings.dockPos === 'top');
+    panel.classList.toggle('xcbb-dock-center', settings.dockPos === 'center');
+    panel.classList.toggle('xcbb-dock-bottom', settings.dockPos === 'bottom');
+  }
+  const ctxMenu = document.createElement('div');
+  ctxMenu.id = 'xcbb-ctx';
+  ctxMenu.className = 'hidden';
+  ctxMenu.innerHTML = `
+    <div class="xcbb-ctx-title">圆点快捷</div>
+    <button data-act="restore">🏠 恢复主界面</button>
+    <button data-act="clean">🧹 清理无效模板</button>
+    <button data-act="settings">⚙ 进入设置</button>
+    <div class="xcbb-ctx-title">停靠位置</div>
+    <div class="xcbb-ctx-dock">
+      <button data-dock="top">上</button>
+      <button data-dock="center">中</button>
+      <button data-dock="bottom">下</button>
+    </div>`;
+  document.body.appendChild(ctxMenu);
+  function hideCtxMenu() { ctxMenu.classList.add('hidden'); }
+  function showCtxMenu() {
+    ctxMenu.classList.remove('hidden');
+    const r = panel.getBoundingClientRect();
+    const mw = ctxMenu.offsetWidth, mh = ctxMenu.offsetHeight;
+    ctxMenu.style.left = Math.max(8, r.left - mw - 8) + 'px';
+    ctxMenu.style.top = Math.min(window.innerHeight - mh - 8, Math.max(8, r.top + r.height / 2 - mh / 2)) + 'px';
+    for (const b of ctxMenu.querySelectorAll('[data-dock]')) {
+      b.classList.toggle('active', b.dataset.dock === settings.dockPos);
+    }
+  }
+  ctxMenu.addEventListener('click', (e) => {
+    const act = e.target.closest('[data-act]');
+    if (act) {
+      hideCtxMenu();
+      if (act.dataset.act === 'restore') { restorePanel(); showSettings(false); }
+      else if (act.dataset.act === 'clean') { cleanInvalidTemplates(); }
+      else if (act.dataset.act === 'settings') { restorePanel(); showSettings(true); }
+    }
+    const dock = e.target.closest('[data-dock]');
+    if (dock) {
+      settings.dockPos = dock.dataset.dock;
+      saveSettings();
+      applyDock();
+      showCtxMenu(); // 刷新高亮
+    }
+  });
+  document.addEventListener('click', (e) => {
+    if (!ctxMenu.classList.contains('hidden') && !ctxMenu.contains(e.target)) hideCtxMenu();
+  });
   el('xcbb-min').addEventListener('click', () => {
     // 收起前清掉拖拽偏移, 让圆点停靠屏幕右侧垂直居中
     panel.style.left = '';
@@ -1481,6 +1567,8 @@
     logEl.classList.add('hidden');
     el('xcbb-log-chevron').textContent = '▸';
     panel.classList.add('xcbb-collapsed');
+    applyDock();
+    panel.title = '左键: 清理无效模板 | 右键: 快捷菜单'; // 圆点操作提示
     settings.panelCollapsed = true; // 记忆收起状态
     saveSettings();
   });
@@ -1491,10 +1579,16 @@
       setPickMode(null);
       log('✔ 已自动退出选取模式');
     }
-    // 点击停靠圆点 → 恢复主界面(设置页只通过 ⚙ 进入); 排除 🗕 按钮自身
+    // 停靠圆点: 左键 = 清理无效模板(保持收起, 结果通过日志未读角标提示)
     if (panel.classList.contains('xcbb-collapsed') && !e.target.closest('#xcbb-min')) {
-      restorePanel();
-      showSettings(false);
+      cleanInvalidTemplates();
+    }
+  });
+  // 停靠圆点: 右键 = 弹出快捷菜单(操作 + 停靠位置)
+  panel.addEventListener('contextmenu', (e) => {
+    if (panel.classList.contains('xcbb-collapsed')) {
+      e.preventDefault();
+      showCtxMenu();
     }
   });
   el('xcbb-log-clear').addEventListener('click', () => { logEl.innerHTML = ''; });
@@ -1600,6 +1694,7 @@
     el('xcbb-confirm').checked = settings.confirmEach;
     el('xcbb-contain').checked = settings.containMatch;
     el('xcbb-commentkw').checked = settings.commentKeywords;
+    el('xcbb-silent').checked = settings.silentBlock;
     el('xcbb-white').value = settings.whitelist;
     el('xcbb-remote-url').value = settings.remoteUrl || '';
     el('xcbb-scan').textContent = statScanned;
@@ -1624,7 +1719,10 @@
   logEl.classList.add('hidden');
   el('xcbb-log-chevron').textContent = '▸';
   // 状态记忆: 上次收起则默认收起为圆点
-  if (settings.panelCollapsed) panel.classList.add('xcbb-collapsed');
+  if (settings.panelCollapsed) {
+    panel.classList.add('xcbb-collapsed');
+    applyDock();
+  }
   renderTemplates();
   renderBadnames();
   renderFreq();
