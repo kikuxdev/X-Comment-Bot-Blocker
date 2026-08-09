@@ -2,7 +2,7 @@
 // @name          X 评论机器人屏蔽器
 // @name:en       X Comment Bot Blocker
 // @namespace     xcbb
-// @version       0.12.11
+// @version       0.12.12
 // @description   选取"机器人模板评论"或"不合理用户名(昵称/@handle)",一键扫描当前推文评论区,文本相似或用户名命中其一即自动屏蔽对应账号。内置约炮引流类高频规则模板(一键加载)、高频特征词挖掘、数据导出/导入,支持相似度阈值、白名单、试运行(仅标记)模式。
 // @description:en Select bot template comments, scan the current tweet's replies for similar text, and auto-block those accounts.
 // @author        kikuxdev
@@ -528,12 +528,18 @@
     blockedHandles.clear();
     urlOwner = getUrlOwner();
     whitelist = parseWhitelist();
+    // 会话去重记录设上限, 防止超长会话无限增长(超过3万条重置)
+    if (processed.size > 30000) {
+      processed.clear();
+      log('ℹ 会话去重记录超上限已重置');
+    }
     scanUri = location.href; // 记录扫描归属页面
     panel.classList.add('xcbb-scanning'); // 圆点进入扫描进度态
     panel.style.setProperty('--xcbb-progress', '0%');
     updateUI();
     log(`▶ 开始扫描 | 阈值 ${settings.threshold.toFixed(2)} | ${settings.autoBlock ? '自动屏蔽' : '仅标记(试运行)'} | 模板 ${templates.length} 条 / 用户名 ${badnames.length} 条${settings.commentKeywords ? ' | 评论关键词匹配开' : ''}${processed.size ? ` | 已评估 ${processed.size} 条, 本次仅处理新增(刷新页面可重置)` : ''}`);
 
+    try {
     let idle = 0, lastScrollY = window.scrollY;
     for (let round = 0; round < settings.maxRounds && running && !stopFlag; round++) {
       if (scanUri !== location.href) { // SPA 页面切换 → 立即停止, 不碰新页面的评论
@@ -573,18 +579,23 @@
         break;
       }
     }
-    running = false;
-    seen.clear(); // 释放本轮持有的文章节点引用, 避免已脱离 DOM 的评论子树滞留内存
-    // 累计统计持久化
-    totals.scanned += statScanned;
-    totals.matched += statMatched;
-    totals.blocked += statBlocked;
-    saveTotals();
-    panel.classList.remove('xcbb-scanning');
-    panel.style.removeProperty('--xcbb-progress');
-    updateUI();
-    log(`✔ 扫描结束: 评论 ${statScanned} | 相似 ${statMatched} | 屏蔽 ${statBlocked}`);
-    showScanResult(); // 完成对话框: 显示封禁数量
+    } catch (e) {
+      log(`⚠ 扫描异常已兜底: ${(e && e.message) || e}`);
+      console.error('[xcbb] 扫描异常', e);
+    } finally {
+      // 无论正常/异常/停止, 都保证状态与资源清理: 不会残留 running/进度态/节点引用
+      running = false;
+      seen.clear(); // 释放本轮持有的文章节点引用
+      totals.scanned += statScanned;
+      totals.matched += statMatched;
+      totals.blocked += statBlocked;
+      saveTotals();
+      panel.classList.remove('xcbb-scanning');
+      panel.style.removeProperty('--xcbb-progress');
+      updateUI();
+      log(`✔ 扫描结束: 评论 ${statScanned} | 相似 ${statMatched} | 屏蔽 ${statBlocked}`);
+      showScanResult();
+    }
   }
 
   /* ================= 面板 UI ================= */
@@ -1771,7 +1782,7 @@
     }
   }
 
-  const VER = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '0.12.11';
+  const VER = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '0.12.12';
   el('xcbb-ver').textContent = 'v' + VER;
   // 日志默认折叠(平时只看统计; 有新内容时显示未读角标)
   logEl.classList.add('hidden');
