@@ -4,4 +4,3 @@ spam-rules*.json
 # 编辑器残留
 *.swp
 # 本地开发笔记(含个人决策记录)
-DEVELOPMENT-LESSONS.md
