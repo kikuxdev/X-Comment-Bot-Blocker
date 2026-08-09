@@ -2,7 +2,7 @@
 // @name          X 评论机器人屏蔽器
 // @name:en       X Comment Bot Blocker
 // @namespace     xcbb
-// @version       0.12.5
+// @version       0.12.6
 // @description   选取"机器人模板评论"或"不合理用户名(昵称/@handle)",一键扫描当前推文评论区,文本相似或用户名命中其一即自动屏蔽对应账号。内置约炮引流类高频规则模板(一键加载)、高频特征词挖掘、数据导出/导入,支持相似度阈值、白名单、试运行(仅标记)模式。
 // @description:en Select bot template comments, scan the current tweet's replies for similar text, and auto-block those accounts.
 // @author        you
@@ -524,6 +524,8 @@
     urlOwner = getUrlOwner();
     whitelist = parseWhitelist();
     scanUri = location.href; // 记录扫描归属页面
+    panel.classList.add('xcbb-scanning'); // 圆点进入扫描进度态
+    panel.style.setProperty('--xcbb-progress', '0%');
     updateUI();
     log(`▶ 开始扫描 | 阈值 ${settings.threshold.toFixed(2)} | ${settings.autoBlock ? '自动屏蔽' : '仅标记(试运行)'} | 模板 ${templates.length} 条 / 用户名 ${badnames.length} 条${settings.commentKeywords ? ' | 评论关键词匹配开' : ''}${processed.size ? ` | 已评估 ${processed.size} 条, 本次仅处理新增(刷新页面可重置)` : ''}`);
 
@@ -557,6 +559,7 @@
       const roundNew = processed.size - before;
       if (roundNew === 0) idle++; else idle = 0;
       updateUI();
+      panel.style.setProperty('--xcbb-progress', Math.round(((round + 1) / settings.maxRounds) * 100) + '%');
       if (idle >= settings.idleStopRounds) {
         log('⏹ 连续多轮无新评论, 自动停止');
         break;
@@ -569,8 +572,11 @@
     totals.matched += statMatched;
     totals.blocked += statBlocked;
     saveTotals();
+    panel.classList.remove('xcbb-scanning');
+    panel.style.removeProperty('--xcbb-progress');
     updateUI();
     log(`✔ 扫描结束: 评论 ${statScanned} | 相似 ${statMatched} | 屏蔽 ${statBlocked}`);
+    showScanResult(); // 完成对话框: 显示封禁数量
   }
 
   /* ================= 面板 UI ================= */
@@ -622,6 +628,24 @@
       border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.5);opacity:0;pointer-events:none;
       transition:opacity .2s ease,transform .2s ease;}
     #xcbb-toast.show{opacity:1;transform:translateY(-50%) translateX(0);}
+    /* 圆点扫描进度: 环形填充 + 呼吸动画 + 计数徽标 */
+    #xcbb-panel.xcbb-collapsed.xcbb-scanning{background:conic-gradient(#f0a020 var(--xcbb-progress,0%), #2c3946 0);}
+    #xcbb-panel.xcbb-collapsed.xcbb-scanning #xcbb-collapsed-icon{animation:xcbb-pulse 1.2s ease-in-out infinite;}
+    @keyframes xcbb-pulse{0%,100%{opacity:1}50%{opacity:.5}}
+    #xcbb-pill-count{position:absolute;bottom:1px;right:1px;background:#f4212e;color:#fff;
+      font-size:8px;line-height:10px;padding:0 3px;border-radius:9999px;min-width:12px;text-align:center;}
+    /* 扫描完成结果对话框 */
+    #xcbb-result{position:fixed;inset:0;z-index:1000003;background:rgba(0,0,0,.55);
+      display:flex;align-items:center;justify-content:center;}
+    .xcbb-result-card{width:240px;background:#17212d;border:1px solid #33404f;border-radius:14px;
+      padding:18px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.5);}
+    .xcbb-result-title{font-size:13px;font-weight:600;color:#e7e9ea;margin-bottom:10px;}
+    .xcbb-result-num{font-size:14px;color:#c9d1d9;margin-bottom:4px;}
+    .xcbb-result-num b{color:#f4212e;font-size:22px;}
+    .xcbb-result-sub{font-size:11px;color:#9aa7b4;margin-bottom:14px;}
+    #xcbb-result button{background:#1d9bf0;color:#fff;border:none;border-radius:8px;
+      padding:5px 22px;font-size:12px;cursor:pointer;}
+    #xcbb-result button:hover{filter:brightness(1.15);}
     #xcbb-tpl-list,#xcbb-name-list{margin:6px 0;max-height:150px;overflow:auto;
       display:flex;flex-direction:column;gap:4px;}
     .xcbb-item{display:flex;align-items:center;gap:6px;background:#1e2a38;
@@ -761,7 +785,7 @@
       <button id="xcbb-settings-btn" class="ghost tiny" title="设置与数据管理">⚙</button>
       <button id="xcbb-min" class="ghost tiny" title="收起为圆点">🗕</button>
     </div>
-    <div id="xcbb-collapsed-icon">🤖</div>
+    <div id="xcbb-collapsed-icon">🤖<span id="xcbb-pill-count" class="hidden"></span></div>
     <div id="xcbb-body">
       <!-- 主界面: 简单操作 -->
       <div id="xcbb-main" class="p-2 space-y-1.5">
@@ -1546,6 +1570,24 @@
     clearTimeout(t._timer);
     t._timer = setTimeout(() => t.classList.remove('show'), 2200);
   }
+  // 扫描完成结果对话框(封禁数量)
+  function showScanResult() {
+    $('#xcbb-result')?.remove();
+    const box = document.createElement('div');
+    box.id = 'xcbb-result';
+    const card = document.createElement('div');
+    card.className = 'xcbb-result-card';
+    card.innerHTML = `
+      <div class="xcbb-result-title">✅ 扫描完成</div>
+      <div class="xcbb-result-num">封禁 <b>${statBlocked}</b> 个账号</div>
+      <div class="xcbb-result-sub">扫描 ${statScanned} · 疑似 ${statMatched}</div>
+      <button id="xcbb-result-close">知道了</button>`;
+    box.appendChild(card);
+    document.body.appendChild(box);
+    const close = () => box.remove();
+    card.querySelector('#xcbb-result-close').addEventListener('click', close);
+    box.addEventListener('click', (e) => { if (e.target === box) close(); });
+  }
   // 快捷菜单: 固定出现在右上角(Tampermonkey 图标下方区域; 面板展开时让位到面板下方)
   function showCtxMenu() {
     ctxMenu.classList.remove('hidden');
@@ -1617,10 +1659,9 @@
       setPickMode(null);
       log('✔ 已自动退出选取模式');
     }
-    // 停靠圆点: 左键 = 开始扫描(恢复面板以便观察统计与日志)
+    // 停靠圆点: 左键 = 直接开始扫描(不展开面板; 圆点显示进度, 完成后弹结果对话框)
     if (panel.classList.contains('xcbb-collapsed') && !e.target.closest('#xcbb-min')) {
-      restorePanel();
-      showSettings(false);
+      if (running) { toast('⏳ 扫描进行中, 请稍候'); return; } // 避免重复操作
       runScan();
     }
   });
@@ -1752,6 +1793,12 @@
     const st = el('xcbb-status');
     st.textContent = running ? '扫描中…' : '待机';
     st.style.color = running ? '#f0a020' : '';
+    // 圆点扫描计数徽标(仅收起且扫描中显示)
+    const pc = el('xcbb-pill-count');
+    if (pc) {
+      pc.textContent = statScanned;
+      pc.classList.toggle('hidden', !(running && panel.classList.contains('xcbb-collapsed')));
+    }
   }
 
   const VER = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '0.8.0';
