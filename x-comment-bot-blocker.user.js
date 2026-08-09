@@ -2,7 +2,7 @@
 // @name          X 评论机器人屏蔽器
 // @name:en       X Comment Bot Blocker
 // @namespace     xcbb
-// @version       0.12.10
+// @version       0.12.11
 // @description   选取"机器人模板评论"或"不合理用户名(昵称/@handle)",一键扫描当前推文评论区,文本相似或用户名命中其一即自动屏蔽对应账号。内置约炮引流类高频规则模板(一键加载)、高频特征词挖掘、数据导出/导入,支持相似度阈值、白名单、试运行(仅标记)模式。
 // @description:en Select bot template comments, scan the current tweet's replies for similar text, and auto-block those accounts.
 // @author        kikuxdev
@@ -192,7 +192,11 @@
       const more = el.querySelector('[data-testid="tweet-text-show-more-link"]') ||
         [...el.querySelectorAll('[role="button"]')].find((b) =>
           /^(show more|显示更多)$/i.test((b.textContent || '').trim()));
-      if (more) { more.click(); await sleep(120); } // 等 React 渲染全文
+      if (more) {
+        const beforeLen = el.innerText.length;
+        more.click();
+        await waitFor(() => el.innerText.length !== beforeLen, 800, 80); // 等全文渲染(最多800ms), 避免读到截断文本
+      }
     }
     return el.innerText;
   }
@@ -530,7 +534,7 @@
     updateUI();
     log(`▶ 开始扫描 | 阈值 ${settings.threshold.toFixed(2)} | ${settings.autoBlock ? '自动屏蔽' : '仅标记(试运行)'} | 模板 ${templates.length} 条 / 用户名 ${badnames.length} 条${settings.commentKeywords ? ' | 评论关键词匹配开' : ''}${processed.size ? ` | 已评估 ${processed.size} 条, 本次仅处理新增(刷新页面可重置)` : ''}`);
 
-    let idle = 0;
+    let idle = 0, lastScrollY = window.scrollY;
     for (let round = 0; round < settings.maxRounds && running && !stopFlag; round++) {
       if (scanUri !== location.href) { // SPA 页面切换 → 立即停止, 不碰新页面的评论
         log('⏹ 检测到页面切换, 扫描已停止(只处理当前页面)');
@@ -558,7 +562,10 @@
         break;
       }
       const roundNew = processed.size - before;
-      if (roundNew === 0) idle++; else idle = 0;
+      const scrolled = window.scrollY !== lastScrollY;
+      lastScrollY = window.scrollY;
+      // 仍在滚动(懒加载进行中)时不累计闲置; 滚不动且无新增才算闲置 → 修复扫描提前停止
+      if (roundNew === 0 && !scrolled) idle++; else idle = 0;
       updateUI();
       panel.style.setProperty('--xcbb-progress', Math.round(((round + 1) / settings.maxRounds) * 100) + '%');
       if (idle >= settings.idleStopRounds) {
@@ -1539,7 +1546,7 @@
     saveSettings();
     applyDock();
   });
-  el('xcbb-run').addEventListener('click', runScan);
+  el('xcbb-run').addEventListener('click', tryStartScan);
   el('xcbb-stop').addEventListener('click', () => { stopFlag = true; log('⏹ 正在停止…'); });
   function restorePanel() {
     panel.classList.remove('xcbb-collapsed');
@@ -1587,9 +1594,18 @@
   function toast(msg) {
     notify(msg, '', 'info', 2200);
   }
-  // 扫描完成通知(非模态, 右上角浅绿)
+  // 统一扫描入口: 运行中给出进行中通知(右上角, ~3s), 避免重复扫描
+  function tryStartScan() {
+    if (running) {
+      notify('⏳ 扫描进行中', '请稍候, 无需重复操作', 'info', 3000);
+      return;
+    }
+    runScan();
+  }
+
+  // 扫描完成通知(非模态, 右上角浅绿, ~3s)
   function showScanResult() {
-    notify('✅ 扫描完成', `封禁 ${statBlocked} 个账号 · 扫描 ${statScanned} · 疑似 ${statMatched}`, 'success', 5000);
+    notify('✅ 扫描完成', `封禁 ${statBlocked} 个账号 · 扫描 ${statScanned} · 疑似 ${statMatched}`, 'success', 3000);
   }
   el('xcbb-min').addEventListener('click', () => {
     // 收起前清掉拖拽偏移, 让圆点停靠屏幕右侧垂直居中
@@ -1612,10 +1628,9 @@
       setPickMode(null);
       log('✔ 已自动退出选取模式');
     }
-    // 停靠圆点: 左键 = 直接开始扫描(不展开面板; 圆点显示进度, 完成后弹结果对话框)
+    // 停靠圆点: 左键 = 直接开始扫描(不展开面板; 圆点显示进度, 完成后通知)
     if (panel.classList.contains('xcbb-collapsed') && !e.target.closest('#xcbb-min')) {
-      if (running) { toast('⏳ 扫描进行中, 请稍候'); return; } // 避免重复操作
-      runScan();
+      tryStartScan();
     }
   });
   // 停靠圆点: 右键 = 恢复主界面(初始矩形页: 快速选择/日志/选取按钮)
@@ -1756,7 +1771,7 @@
     }
   }
 
-  const VER = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '0.12.10';
+  const VER = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '0.12.11';
   el('xcbb-ver').textContent = 'v' + VER;
   // 日志默认折叠(平时只看统计; 有新内容时显示未读角标)
   logEl.classList.add('hidden');
@@ -1774,8 +1789,7 @@
   try {
     GM_registerMenuCommand('⚡ 快速扫描', () => {
       // 保持当前面板状态: 收起时=圆点直扫(进度环+通知), 展开时=面板统计; 不强制展开矩形面板
-      if (running) { toast('⏳ 扫描进行中, 请稍候'); return; }
-      runScan();
+      tryStartScan();
     });
     GM_registerMenuCommand('⚙ 进入设置', () => { restorePanel(); showSettings(true); });
   } catch (e) { /* 非 Tampermonkey 环境时忽略 */ }
