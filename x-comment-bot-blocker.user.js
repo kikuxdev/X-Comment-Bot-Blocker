@@ -2,7 +2,7 @@
 // @name          X 评论机器人屏蔽器
 // @name:en       X Comment Bot Blocker
 // @namespace     xcbb
-// @version       0.12.3
+// @version       0.12.4
 // @description   选取"机器人模板评论"或"不合理用户名(昵称/@handle)",一键扫描当前推文评论区,文本相似或用户名命中其一即自动屏蔽对应账号。内置约炮引流类高频规则模板(一键加载)、高频特征词挖掘、数据导出/导入,支持相似度阈值、白名单、试运行(仅标记)模式。
 // @description:en Select bot template comments, scan the current tweet's replies for similar text, and auto-block those accounts.
 // @author        you
@@ -616,6 +616,12 @@
     #xcbb-ctx .xcbb-ctx-dock{display:flex;gap:4px;padding:0 8px 6px;}
     #xcbb-ctx .xcbb-ctx-dock button{justify-content:center;padding:3px 0;border:1px solid #2c3946;}
     #xcbb-ctx .xcbb-ctx-dock button:hover{border-color:#1d9bf0;}
+    /* 浮动提示(圆点/菜单操作反馈) */
+    #xcbb-toast{position:fixed;z-index:1000002;right:56px;top:50%;transform:translateY(-50%) translateX(8px);
+      background:#1b2633;border:1px solid #33404f;color:#e7e9ea;font-size:12px;padding:8px 12px;
+      border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.5);opacity:0;pointer-events:none;
+      transition:opacity .2s ease,transform .2s ease;}
+    #xcbb-toast.show{opacity:1;transform:translateY(-50%) translateX(0);}
     #xcbb-tpl-list,#xcbb-name-list{margin:6px 0;max-height:150px;overflow:auto;
       display:flex;flex-direction:column;gap:4px;}
     .xcbb-item{display:flex;align-items:center;gap:6px;background:#1e2a38;
@@ -1011,7 +1017,7 @@
     log(`✔ 已添加模板: "${text.length > 40 ? text.slice(0, 40) + '…' : text}"`);
   }
 
-  // 清理无效模板: 纯数字(时间戳/编号) / 不含中文且长度<6(验证码/短英文词)
+  // 清理无效模板: 纯数字(时间戳/编号) / 不含中文且长度<6(验证码/短英文词); 返回清理数量
   function cleanInvalidTemplates() {
     const before = templates.length;
     templates = templates.filter((t) => {
@@ -1019,10 +1025,11 @@
       if (t.n.length < 6 && !/[\u4e00-\u9fff]/.test(t.n)) return false;
       return true;
     });
-    if (templates.length === before) { log('ℹ 没有需要清理的无效模板'); return; }
+    if (templates.length === before) { log('ℹ 没有需要清理的无效模板'); return 0; }
     saveTemplates();
     renderTemplates();
     log(`🧹 已清理 ${before - templates.length} 条无效模板(纯数字/短乱码/短英文), 剩 ${templates.length} 条`);
+    return before - templates.length;
   }
 
   /* ---- 用户名名单(支持编辑/删除) ---- */
@@ -1517,42 +1524,69 @@
   ctxMenu.id = 'xcbb-ctx';
   ctxMenu.className = 'hidden';
   ctxMenu.innerHTML = `
-    <div class="xcbb-ctx-title">圆点快捷</div>
-    <button data-act="restore">🏠 恢复主界面</button>
+    <div class="xcbb-ctx-title">脚本快捷</div>
+    <button data-act="scan">▶ 开始扫描</button>
     <button data-act="clean">🧹 清理无效模板</button>
-    <button data-act="settings">⚙ 进入设置</button>
-    <div class="xcbb-ctx-title">停靠位置</div>
-    <div class="xcbb-ctx-dock">
+    <button data-act="sync">📡 同步数据</button>
+    <button data-act="show" class="xcbb-ctx-only-collapsed">🏠 显示面板</button>
+    <button data-act="settings">⚙ 设置页面</button>
+    <div class="xcbb-ctx-title xcbb-ctx-only-collapsed">停靠位置</div>
+    <div class="xcbb-ctx-dock xcbb-ctx-only-collapsed">
       <button data-dock="top">上</button>
       <button data-dock="center">中</button>
       <button data-dock="bottom">下</button>
     </div>`;
   document.body.appendChild(ctxMenu);
   function hideCtxMenu() { ctxMenu.classList.add('hidden'); }
-  function showCtxMenu() {
+  function toast(msg) {
+    let t = $('#xcbb-toast');
+    if (!t) { t = document.createElement('div'); t.id = 'xcbb-toast'; document.body.appendChild(t); }
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+  function showCtxMenuAt(x, y) {
     ctxMenu.classList.remove('hidden');
-    const r = panel.getBoundingClientRect();
     const mw = ctxMenu.offsetWidth, mh = ctxMenu.offsetHeight;
-    ctxMenu.style.left = Math.max(8, r.left - mw - 8) + 'px';
-    ctxMenu.style.top = Math.min(window.innerHeight - mh - 8, Math.max(8, r.top + r.height / 2 - mh / 2)) + 'px';
+    ctxMenu.style.left = Math.min(window.innerWidth - mw - 8, Math.max(8, x)) + 'px';
+    ctxMenu.style.top = Math.min(window.innerHeight - mh - 8, Math.max(8, y)) + 'px';
+    // 仅收起时显示"显示面板/停靠位置"
+    const collapsed = panel.classList.contains('xcbb-collapsed');
+    for (const el of ctxMenu.querySelectorAll('.xcbb-ctx-only-collapsed')) {
+      el.style.display = collapsed ? '' : 'none';
+    }
     for (const b of ctxMenu.querySelectorAll('[data-dock]')) {
       b.classList.toggle('active', b.dataset.dock === settings.dockPos);
     }
   }
+  // 页面空白区域右键 → 脚本快捷菜单(快速命令 + 设置); 交互元素上不拦截
+  document.addEventListener('contextmenu', (e) => {
+    if (e.target.closest('#xcbb-panel') || e.target.closest('#xcbb-ctx')) return;
+    if (e.target.closest('article, a, button, input, textarea, [role="button"], [role="link"], [role="menu"], [data-testid]')) return;
+    e.preventDefault();
+    showCtxMenuAt(e.clientX, e.clientY);
+  });
   ctxMenu.addEventListener('click', (e) => {
     const act = e.target.closest('[data-act]');
     if (act) {
       hideCtxMenu();
-      if (act.dataset.act === 'restore') { restorePanel(); showSettings(false); }
-      else if (act.dataset.act === 'clean') { cleanInvalidTemplates(); }
-      else if (act.dataset.act === 'settings') { restorePanel(); showSettings(true); }
+      const a = act.dataset.act;
+      if (a === 'scan') { restorePanel(); showSettings(false); runScan(); }
+      else if (a === 'clean') {
+        const n = cleanInvalidTemplates();
+        toast(n > 0 ? `🧹 已清理 ${n} 条无效模板` : '🧹 无无效模板');
+      }
+      else if (a === 'sync') { fetchRemoteJson('manual'); }
+      else if (a === 'show') { restorePanel(); showSettings(false); }
+      else if (a === 'settings') { restorePanel(); showSettings(true); }
     }
     const dock = e.target.closest('[data-dock]');
     if (dock) {
       settings.dockPos = dock.dataset.dock;
       saveSettings();
       applyDock();
-      showCtxMenu(); // 刷新高亮
+      showCtxMenuAt(parseInt(ctxMenu.style.left, 10), parseInt(ctxMenu.style.top, 10)); // 刷新高亮
     }
   });
   document.addEventListener('click', (e) => {
@@ -1568,7 +1602,7 @@
     el('xcbb-log-chevron').textContent = '▸';
     panel.classList.add('xcbb-collapsed');
     applyDock();
-    panel.title = '左键: 清理无效模板 | 右键: 快捷菜单'; // 圆点操作提示
+    panel.title = '左键: 清理无效模板 | 右键: 主界面'; // 圆点操作提示
     settings.panelCollapsed = true; // 记忆收起状态
     saveSettings();
   });
@@ -1579,16 +1613,18 @@
       setPickMode(null);
       log('✔ 已自动退出选取模式');
     }
-    // 停靠圆点: 左键 = 清理无效模板(保持收起, 结果通过日志未读角标提示)
+    // 停靠圆点: 左键 = 清理无效模板(保持收起, 浮动提示反馈结果)
     if (panel.classList.contains('xcbb-collapsed') && !e.target.closest('#xcbb-min')) {
-      cleanInvalidTemplates();
+      const n = cleanInvalidTemplates();
+      toast(n > 0 ? `🧹 已清理 ${n} 条无效模板` : '🧹 无无效模板');
     }
   });
-  // 停靠圆点: 右键 = 弹出快捷菜单(操作 + 停靠位置)
+  // 停靠圆点: 右键 = 恢复主界面(初始矩形页: 快速选择/日志/选取按钮)
   panel.addEventListener('contextmenu', (e) => {
     if (panel.classList.contains('xcbb-collapsed')) {
       e.preventDefault();
-      showCtxMenu();
+      restorePanel();
+      showSettings(false);
     }
   });
   el('xcbb-log-clear').addEventListener('click', () => { logEl.innerHTML = ''; });
