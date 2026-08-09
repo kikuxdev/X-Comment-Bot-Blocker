@@ -629,24 +629,41 @@
 
   /* ================= 面板 UI ================= */
   GM_addStyle(`
+    /* 浅色纸感护眼主题: 米白纸底 + 低饱和绿主色 + 柔和红/琥珀; 颜色统一走 CSS 变量, 调色只改此处 */
+    :root{
+      --xcbb-bg0:#f7f5ef; --xcbb-bg1:#efece3;          /* 面板底(米白纸感) */
+      --xcbb-card:#ece9df; --xcbb-card-hover:#e2ded2;  /* 卡片/条目 */
+      --xcbb-input:#fbfaf5; --xcbb-input-border:#d8d3c6; /* 输入框/日志底 */
+      --xcbb-border:#ddd8cc; --xcbb-border-strong:#cfc9ba; --xcbb-border-hover:#b8b2a2;
+      --xcbb-text:#3a3f3a; --xcbb-text-strong:#262b26;  /* 主文字 */
+      --xcbb-dim:#6f766d; --xcbb-faint:#979e94; --xcbb-placeholder:#8d9489;
+      --xcbb-accent:#4e8a6d; --xcbb-accent-hover:#43785d; /* 主操作色(低饱和绿) */
+      --xcbb-danger:#b85252; --xcbb-danger-deep:#9c4343;  /* 危险/封禁 */
+      --xcbb-warn:#a3741f;                               /* 警告/疑似 */
+      --xcbb-ok-bg:#e4efe6; --xcbb-ok-border:#b8d5c0; --xcbb-ok-text:#2f6b44;
+      --xcbb-info-bg:#e7eef4; --xcbb-info-border:#bccddb; --xcbb-info-text:#33608a;
+      --xcbb-overlay:rgba(28,33,28,.45);
+      --xcbb-shadow:0 8px 30px rgba(90,86,70,.28);
+      --xcbb-scrollbar:#d8d3c6; --xcbb-scrollbar-hover:#c2bba8;
+    }
     #xcbb-panel{position:fixed;top:12px;right:12px;z-index:999999;width:360px;
-      background:linear-gradient(180deg,#1d2937,#17212d);color:#e7e9ea;border:1px solid #33404f;border-radius:14px;
+      background:linear-gradient(180deg,var(--xcbb-bg0),var(--xcbb-bg1));color:var(--xcbb-text);border:1px solid var(--xcbb-border);border-radius:14px;
       font:12.5px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
-      box-shadow:0 8px 30px rgba(0,0,0,.5);
+      box-shadow:var(--xcbb-shadow);
       transition:width .25s ease,height .25s ease,border-radius .25s ease;}
     #xcbb-header{display:flex;align-items:center;gap:6px;padding:6px 10px;cursor:move;
-      user-select:none;border-bottom:1px solid #33404f;font-weight:600;}
+      user-select:none;border-bottom:1px solid var(--xcbb-border);font-weight:600;}
     #xcbb-body{padding:8px 10px;max-height:70vh;overflow:auto;}
-    #xcbb-panel button{background:#1d9bf0;color:#fff;border:none;border-radius:8px;
+    #xcbb-panel button{background:var(--xcbb-accent);color:#fff;border:none;border-radius:8px;
       padding:3px 10px;font-size:11.5px;cursor:pointer;line-height:1.6;
       transition:filter .15s ease,background .15s ease;}
-    #xcbb-panel button:hover{filter:brightness(1.15);}
+    #xcbb-panel button:hover{filter:brightness(.94);} /* 浅色主题悬停加深(白字对比不降反升) */
     #xcbb-panel button:disabled{opacity:.4;cursor:not-allowed;}
-    #xcbb-panel button.ghost{background:transparent;border:1px solid #3d4a55;color:#c9d1d9;}
-    #xcbb-panel button.ghost:hover{background:#243244;border-color:#4a5a6d;filter:none;}
-    #xcbb-panel button.danger{background:#f4212e;}
+    #xcbb-panel button.ghost{background:transparent;border:1px solid var(--xcbb-border-strong);color:var(--xcbb-dim);}
+    #xcbb-panel button.ghost:hover{background:var(--xcbb-card-hover);border-color:var(--xcbb-border-hover);filter:none;}
+    #xcbb-panel button.danger{background:var(--xcbb-danger);}
     #xcbb-panel button.tiny{padding:0 6px;font-size:10.5px;border-radius:6px;}
-    #xcbb-panel input[type=checkbox]{accent-color:#1d9bf0;}
+    #xcbb-panel input[type=checkbox]{accent-color:var(--xcbb-accent);}
     /* 收起为圆点(停靠屏幕右侧, 位置可在右键菜单中选 上/中/下) */
     #xcbb-panel.xcbb-collapsed{width:44px;height:44px;border-radius:9999px;overflow:hidden;cursor:pointer;right:0;}
     #xcbb-panel.xcbb-collapsed.xcbb-dock-top{top:12px;transform:none;}
@@ -664,69 +681,69 @@
       opacity:0;transform:translateY(-8px);cursor:pointer;
       transition:opacity .25s ease,transform .25s ease;}
     #xcbb-notify.show{opacity:1;transform:translateY(0);}
-    #xcbb-notify.success{background:#d9f2e3;border:1px solid #9fd8b8;color:#14693a;}
-    #xcbb-notify.info{background:#e8eef7;border:1px solid #b9c9e4;color:#2f4b7c;}
+    #xcbb-notify.success{background:var(--xcbb-ok-bg);border:1px solid var(--xcbb-ok-border);color:var(--xcbb-ok-text);}
+    #xcbb-notify.info{background:var(--xcbb-info-bg);border:1px solid var(--xcbb-info-border);color:var(--xcbb-info-text);}
     #xcbb-notify .xcbb-notify-title{font-size:12.5px;font-weight:600;}
     #xcbb-notify .xcbb-notify-body{font-size:11.5px;margin-top:2px;opacity:.9;}
     /* 圆点扫描进度: 环形填充 + 呼吸动画 + 计数徽标 */
-    #xcbb-panel.xcbb-collapsed.xcbb-scanning{background:conic-gradient(#f0a020 var(--xcbb-progress,0%), #2c3946 0);
+    #xcbb-panel.xcbb-collapsed.xcbb-scanning{background:conic-gradient(var(--xcbb-warn) var(--xcbb-progress,0%), var(--xcbb-scrollbar) 0);
       animation:xcbb-glow 1.6s ease-in-out infinite;}
     @keyframes xcbb-glow{
-      0%,100%{box-shadow:0 8px 30px rgba(0,0,0,.5), 0 0 0 0 rgba(240,160,32,.45);}
-      50%{box-shadow:0 8px 30px rgba(0,0,0,.5), 0 0 0 9px rgba(240,160,32,0);}
+      0%,100%{box-shadow:var(--xcbb-shadow), 0 0 0 0 rgba(163,116,31,.45);}
+      50%{box-shadow:var(--xcbb-shadow), 0 0 0 9px rgba(163,116,31,0);}
     }
-    #xcbb-pill-count{position:absolute;bottom:1px;right:1px;background:#f4212e;color:#fff;
+    #xcbb-pill-count{position:absolute;bottom:1px;right:1px;background:var(--xcbb-danger);color:#fff;
       font-size:8px;line-height:10px;padding:0 3px;border-radius:9999px;min-width:12px;text-align:center;}
     #xcbb-tpl-list,#xcbb-name-list{margin:6px 0;max-height:150px;overflow:auto;
       display:flex;flex-direction:column;gap:4px;}
-    .xcbb-item{display:flex;align-items:center;gap:6px;background:#1e2a38;
-      border:1px solid #32404d;border-radius:8px;padding:4px 8px;font-size:12px;
+    .xcbb-item{display:flex;align-items:center;gap:6px;background:var(--xcbb-card);
+      border:1px solid var(--xcbb-border);border-radius:8px;padding:4px 8px;font-size:12px;
       transition:border-color .15s ease,background .15s ease;}
-    .xcbb-item:hover{border-color:#4a5a6d;background:#243244;}
-    .xcbb-item .idx{flex:none;color:#6e767d;font-size:11px;
+    .xcbb-item:hover{border-color:var(--xcbb-border-hover);background:var(--xcbb-card-hover);}
+    .xcbb-item .idx{flex:none;color:var(--xcbb-faint);font-size:11px;
       font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
     .xcbb-item .txt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
     .xcbb-item .sub{flex:none;max-width:45%;white-space:nowrap;overflow:hidden;
-      text-overflow:ellipsis;color:#8b98a5;font-size:11px;}
+      text-overflow:ellipsis;color:var(--xcbb-dim);font-size:11px;}
     .xcbb-item button{flex:none;width:20px;height:20px;line-height:1;border-radius:50%;
-      background:transparent !important;border:none !important;color:#6e767d !important;
+      background:transparent !important;border:none !important;color:var(--xcbb-faint) !important;
       padding:0 !important;font-size:11px;transition:color .15s ease,background .15s ease;}
-    .xcbb-item button:hover{color:#f4212e !important;background:#2c3946 !important;}
-    .xcbb-empty{color:#6e767d;font-size:12px;padding:4px 2px;}
+    .xcbb-item button:hover{color:var(--xcbb-danger) !important;background:var(--xcbb-card-hover) !important;}
+    .xcbb-empty{color:var(--xcbb-faint);font-size:12px;padding:4px 2px;}
     #xcbb-freq-list{display:flex;flex-direction:column;gap:2px;margin:2px 0 6px;}
     .xcbb-freq-row{display:flex;align-items:center;gap:8px;padding:3px 6px;border-radius:6px;
       cursor:pointer;transition:background .15s ease;}
-    .xcbb-freq-row:hover{background:#1e2a38;}
-    .xcbb-freq-row.added{background:#12293f;box-shadow:inset 0 0 0 1px #1d9bf0;}
-    .xcbb-freq-token{flex:none;width:96px;font-size:11px;color:#c9d1d9;
+    .xcbb-freq-row:hover{background:var(--xcbb-card-hover);}
+    .xcbb-freq-row.added{background:var(--xcbb-ok-bg);box-shadow:inset 0 0 0 1px var(--xcbb-accent);}
+    .xcbb-freq-token{flex:none;width:96px;font-size:11px;color:var(--xcbb-text);
       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .xcbb-freq-bar{flex:1;min-width:0;height:8px;background:#2c3946;border-radius:4px;overflow:hidden;}
-    .xcbb-freq-bar-fill{display:block;height:100%;background:linear-gradient(90deg,#1d9bf0,#4ab3ff);
+    .xcbb-freq-bar{flex:1;min-width:0;height:8px;background:var(--xcbb-input-border);border-radius:4px;overflow:hidden;}
+    .xcbb-freq-bar-fill{display:block;height:100%;background:linear-gradient(90deg,var(--xcbb-accent),var(--xcbb-accent-hover));
       border-radius:4px;}
-    .xcbb-freq-cnt{flex:none;width:36px;text-align:right;font-size:10px;color:#9aa7b4;
+    .xcbb-freq-cnt{flex:none;width:36px;text-align:right;font-size:10px;color:var(--xcbb-dim);
       font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
-    #xcbb-modal{position:fixed;inset:0;z-index:1000000;background:rgba(0,0,0,.65);display:flex;
+    #xcbb-modal{position:fixed;inset:0;z-index:1000000;background:var(--xcbb-overlay);display:flex;
       align-items:center;justify-content:center;}
-    #xcbb-modal .box{width:600px;max-width:92vw;max-height:80vh;background:#17212d;border:1px solid #33404f;
+    #xcbb-modal .box{width:600px;max-width:92vw;max-height:80vh;background:var(--xcbb-bg0);border:1px solid var(--xcbb-border);
       border-radius:12px;padding:14px;display:flex;flex-direction:column;}
-    #xcbb-modal textarea{width:100%;min-height:300px;flex:1;box-sizing:border-box;background:#131c26;
-      border:1px solid #2c3946;color:#e7e9ea;border-radius:8px;padding:8px;
+    #xcbb-modal textarea{width:100%;min-height:300px;flex:1;box-sizing:border-box;background:var(--xcbb-input);
+      border:1px solid var(--xcbb-input-border);color:var(--xcbb-text);border-radius:8px;padding:8px;
       font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;resize:vertical;}
-    #xcbb-manual,#xcbb-white,#xcbb-remote-url,#xcbb-comment-kws,.xcbb-num-input{width:100%;box-sizing:border-box;background:#131c26;
-      border:1px solid #2c3946;color:#e7e9ea;border-radius:8px;padding:4px 8px;
+    #xcbb-manual,#xcbb-white,#xcbb-remote-url,#xcbb-comment-kws,.xcbb-num-input{width:100%;box-sizing:border-box;background:var(--xcbb-input);
+      border:1px solid var(--xcbb-input-border);color:var(--xcbb-text);border-radius:8px;padding:4px 8px;
       font-size:12px;resize:vertical;font-family:inherit;}
     .xcbb-num-input{width:90px;flex:none;border-radius:6px;padding:2px 6px;font-size:11px;}
-    #xcbb-log{margin-top:2px;background:#131c26;border:1px solid #2c3946;border-radius:8px;
+    #xcbb-log{margin-top:2px;background:var(--xcbb-input);border:1px solid var(--xcbb-input-border);border-radius:8px;
       padding:5px 7px;height:200px;max-height:45vh;overflow:auto;font:11px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-      color:#8b98a5;white-space:pre-wrap;word-break:break-all;}
+      color:var(--xcbb-dim);white-space:pre-wrap;word-break:break-all;}
     #xcbb-log::-webkit-scrollbar{width:8px;}
-    #xcbb-log::-webkit-scrollbar-thumb{background:#2c3946;border-radius:4px;}
-    #xcbb-log::-webkit-scrollbar-thumb:hover{background:#4a5a6d;}
+    #xcbb-log::-webkit-scrollbar-thumb{background:var(--xcbb-scrollbar);border-radius:4px;}
+    #xcbb-log::-webkit-scrollbar-thumb:hover{background:var(--xcbb-scrollbar-hover);}
     #xcbb-log::-webkit-scrollbar-track{background:transparent;}
     #xcbb-hint{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:999999;
-      background:#f4212e;color:#fff;padding:8px 18px;border-radius:9999px;font-size:13px;
+      background:var(--xcbb-danger);color:#fff;padding:8px 18px;border-radius:9999px;font-size:13px;
       font-weight:600;box-shadow:0 4px 20px rgba(0,0,0,.4);}
-    article.xcbb-flagged{box-shadow:inset 0 0 0 2px #f4212e !important;border-radius:16px;}
+    article.xcbb-flagged{box-shadow:inset 0 0 0 2px var(--xcbb-danger) !important;border-radius:16px;}
     /* 迷你工具类(Tailwind CDN 不可用时的降级; Tailwind 加载后同值覆盖) */
     .hidden{display:none !important;}
     .flex{display:flex;} .flex-col{flex-direction:column;} .flex-1{flex:1 1 0%;} .flex-wrap{flex-wrap:wrap;}
@@ -738,34 +755,34 @@
     .text-xs{font-size:12px;line-height:16px;} .text-\[11px\]{font-size:11px;}
     .uppercase{text-transform:uppercase;} .font-semibold{font-weight:600;} .font-normal{font-weight:400;}
     .space-y-2>*+*{margin-top:8px;} .space-y-4>*+*{margin-top:16px;}
-    .xcbb-edit-input{flex:1;min-width:0;background:#131c26;border:1px solid #2c3946;border-radius:6px;
-      padding:2px 6px;color:#e7e9ea;font-size:12px;font-family:inherit;}
-    .xcbb-badge{background:#f4212e;color:#fff;border-radius:9999px;font-size:9px;
+    .xcbb-edit-input{flex:1;min-width:0;background:var(--xcbb-input);border:1px solid var(--xcbb-input-border);border-radius:6px;
+      padding:2px 6px;color:var(--xcbb-text);font-size:12px;font-family:inherit;}
+    .xcbb-badge{background:var(--xcbb-danger);color:#fff;border-radius:9999px;font-size:9px;
       line-height:12px;padding:0 4px;min-width:14px;text-align:center;}
     /* 日志标题行 = 整行可点击开关 */
     #xcbb-log-head{border-radius:6px;cursor:pointer;transition:background .15s ease;}
-    #xcbb-log-head:hover{background:#1b2633;}
-    .xcbb-dim{color:#9aa7b4;}
+    #xcbb-log-head:hover{background:var(--xcbb-card-hover);}
+    .xcbb-dim{color:var(--xcbb-dim);}
     /* 静默屏蔽: 脚本执行屏蔽的窗口期内隐藏 X 的菜单与确认弹层(点击照常, 视觉无感) */
     html.xcbb-silent [role="menu"],
     html.xcbb-silent [role="alertdialog"]{visibility:hidden !important;}
-    .xcbb-card{background:#1b2633;border:1px solid #31404f;border-radius:10px;padding:8px 10px;}
-    .xcbb-section-title{font-size:11px;font-weight:600;color:#c9d1d9;letter-spacing:.02em;}
-    .xcbb-count-badge{background:#2c3946;color:#9aa7b4;border-radius:9999px;font-size:10px;
+    .xcbb-card{background:var(--xcbb-card);border:1px solid var(--xcbb-border);border-radius:10px;padding:8px 10px;}
+    .xcbb-section-title{font-size:11px;font-weight:600;color:var(--xcbb-text);letter-spacing:.02em;}
+    .xcbb-count-badge{background:var(--xcbb-scrollbar);color:var(--xcbb-dim);border-radius:9999px;font-size:10px;
       line-height:14px;padding:0 6px;min-width:18px;text-align:center;}
     /* 设置页 Tab */
     #xcbb-panel .xcbb-tab{flex:1;display:flex;align-items:center;justify-content:center;gap:4px;
       background:transparent;border:1px solid transparent;border-radius:8px 8px 0 0;
-      color:#9aa7b4;font-size:11px;padding:5px 0;cursor:pointer;position:relative;
+      color:var(--xcbb-faint);font-size:11px;padding:5px 0;cursor:pointer;position:relative;
       transition:color .15s ease,background .15s ease;}
     #xcbb-panel .xcbb-tab::after{content:'';position:absolute;left:22%;right:22%;bottom:-1px;
       height:2px;background:transparent;border-radius:2px;}
-    #xcbb-panel .xcbb-tab:hover{color:#e7e9ea;background:#131c26;filter:none;}
-    #xcbb-panel .xcbb-tab.active{color:#1d9bf0;background:#131c26;}
-    #xcbb-panel .xcbb-tab.active::after{background:#1d9bf0;}
-    #xcbb-panel textarea::placeholder,#xcbb-panel input::placeholder{color:#6e767d;}
+    #xcbb-panel .xcbb-tab:hover{color:var(--xcbb-text);background:var(--xcbb-input);filter:none;}
+    #xcbb-panel .xcbb-tab.active{color:var(--xcbb-accent);background:var(--xcbb-input);}
+    #xcbb-panel .xcbb-tab.active::after{background:var(--xcbb-accent);}
+    #xcbb-panel textarea::placeholder,#xcbb-panel input::placeholder{color:var(--xcbb-placeholder);}
     .leading-relaxed{line-height:1.625;} .pt-1\.5{padding-top:6px;}
-    .border-t{border-top:1px solid #31404f;}
+    .border-t{border-top:1px solid var(--xcbb-border);}
     .min-h-0{min-height:0;} .overflow-auto{overflow:auto;} .flex-none{flex:none;} .items-stretch{align-items:stretch;}
     .py-0\.5{padding-top:2px;padding-bottom:2px;} .-mx-1{margin-left:-4px;margin-right:-4px;} .select-none{user-select:none;}
     .text-center{text-align:center;} .mt-3{margin-top:12px;}
@@ -825,15 +842,15 @@
           <button id="xcbb-stop" class="danger" disabled>⏹</button>
           <span id="xcbb-status" class="text-[11px] xcbb-dim"></span>
           <span class="flex-1"></span>
-          <label class="flex items-center gap-0.5 text-[11px] text-[#e7e9ea]" title="自动屏蔽(关=仅标记)">
+          <label class="flex items-center gap-0.5 text-[11px] text-[#262b26]" title="自动屏蔽(关=仅标记)">
             <input id="xcbb-autoblock" type="checkbox">自动
           </label>
         </div>
         <div class="flex items-center justify-between text-[10px] xcbb-dim">
-          <span>扫描 <b id="xcbb-scan" class="text-[#e7e9ea]">0</b></span>
-          <span>疑似 <b id="xcbb-match" class="text-[#f0a020]">0</b></span>
-          <span title="本次新屏蔽的独立账号(同账号多条评论只计一次)">封禁 <b id="xcbb-block" class="text-[#f4212e]">0</b></span>
-          <span title="历史累计封禁(跨扫描/跨页面, 与 X 设置里的屏蔽列表可对照)">累计 <b id="xcbb-total" class="text-[#f4212e]">0</b></span>
+          <span>扫描 <b id="xcbb-scan" class="text-[#262b26]">0</b></span>
+          <span>疑似 <b id="xcbb-match" class="text-[#a3741f]">0</b></span>
+          <span title="本次新屏蔽的独立账号(同账号多条评论只计一次)">封禁 <b id="xcbb-block" class="text-[#b85252]">0</b></span>
+          <span title="历史累计封禁(跨扫描/跨页面, 与 X 设置里的屏蔽列表可对照)">累计 <b id="xcbb-total" class="text-[#b85252]">0</b></span>
         </div>
         <div class="flex items-center gap-1.5">
           <button id="xcbb-pick" class="ghost flex-1">＋ 选取评论</button>
@@ -913,12 +930,12 @@
           <section class="xcbb-card mb-1.5">
             <h3 class="xcbb-section-title mb-1">数据概览</h3>
             <div class="flex justify-between text-center">
-              <div><div class="text-[14px] font-semibold text-[#e7e9ea]" id="xcbb-ov-tpl">0</div><div class="text-[9px] xcbb-dim">模板</div></div>
-              <div><div class="text-[14px] font-semibold text-[#e7e9ea]" id="xcbb-ov-names">0</div><div class="text-[9px] xcbb-dim">名单</div></div>
-              <div><div class="text-[14px] font-semibold text-[#e7e9ea]" id="xcbb-ov-corpus">0</div><div class="text-[9px] xcbb-dim">语料</div></div>
-              <div><div class="text-[14px] font-semibold text-[#f4212e]" id="xcbb-ov-blocked">0</div><div class="text-[9px] xcbb-dim">累计封禁</div></div>
+              <div><div class="text-[14px] font-semibold text-[#262b26]" id="xcbb-ov-tpl">0</div><div class="text-[9px] xcbb-dim">模板</div></div>
+              <div><div class="text-[14px] font-semibold text-[#262b26]" id="xcbb-ov-names">0</div><div class="text-[9px] xcbb-dim">名单</div></div>
+              <div><div class="text-[14px] font-semibold text-[#262b26]" id="xcbb-ov-corpus">0</div><div class="text-[9px] xcbb-dim">语料</div></div>
+              <div><div class="text-[14px] font-semibold text-[#b85252]" id="xcbb-ov-blocked">0</div><div class="text-[9px] xcbb-dim">累计封禁</div></div>
             </div>
-            <div class="text-[10px] xcbb-dim mt-1.5">上次远程同步: <span id="xcbb-ov-sync" class="text-[#c9d1d9]">从未</span></div>
+            <div class="text-[10px] xcbb-dim mt-1.5">上次远程同步: <span id="xcbb-ov-sync" class="text-[#3a3f3a]">从未</span></div>
           </section>
           <section class="xcbb-card">
             <h3 class="xcbb-section-title mb-1.5">数据文件(JSON 分离)</h3>
@@ -933,7 +950,7 @@
               <input id="xcbb-remote-url" placeholder="https://gist.githubusercontent.com/.../raw/...">
               <div class="mt-1 flex items-center gap-1.5">
                 <button id="xcbb-remote-pull" class="ghost tiny">📡 拉取并合并</button>
-                <label class="flex items-center gap-1 text-[10px] text-[#c9d1d9]" title="页面加载时自动拉取一次, 仅内容变化时合并">
+                <label class="flex items-center gap-1 text-[10px] text-[#3a3f3a]" title="页面加载时自动拉取一次, 仅内容变化时合并">
                   <input id="xcbb-autosync" type="checkbox"> 启动自动同步
                 </label>
               </div>
@@ -943,22 +960,22 @@
         <div id="xcbb-panel-opt" class="flex-1 min-h-0 overflow-auto hidden">
           <section class="xcbb-card">
             <h3 class="xcbb-section-title mb-1.5">屏蔽行为</h3>
-            <label class="flex items-center gap-1.5 text-[11px] mt-1 text-[#c9d1d9]">
+            <label class="flex items-center gap-1.5 text-[11px] mt-1 text-[#3a3f3a]">
               <input id="xcbb-confirm" type="checkbox"> 屏蔽前逐个确认
             </label>
-            <label class="flex items-center gap-1.5 text-[11px] mt-1 text-[#c9d1d9]">
+            <label class="flex items-center gap-1.5 text-[11px] mt-1 text-[#3a3f3a]">
               <input id="xcbb-contain" type="checkbox"> 包含匹配(短模板被长评论完整包含)
             </label>
-            <label class="flex items-center gap-1.5 text-[11px] mt-1 text-[#c9d1d9]" title="评论文本含关键词即命中(如约炮/裸聊); 匹配源为内置低风险词+下方自定义列表, 与用户名名单独立, 名单里的普通词不会误伤正常评论">
+            <label class="flex items-center gap-1.5 text-[11px] mt-1 text-[#3a3f3a]" title="评论文本含关键词即命中(如约炮/裸聊); 匹配源为内置低风险词+下方自定义列表, 与用户名名单独立, 名单里的普通词不会误伤正常评论">
               <input id="xcbb-commentkw" type="checkbox"> 评论关键词匹配
             </label>
             <div class="text-[10px] xcbb-dim mt-1">评论关键词(每行一条, 与名单独立; 内置低风险词始终生效)</div>
             <textarea id="xcbb-comment-kws" rows="3" class="mt-0.5" placeholder="每行一条, 如: 约炮 / /正则/"></textarea>
-            <label class="flex items-center gap-1.5 text-[11px] mt-1 text-[#c9d1d9]" title="屏蔽时隐藏 X 的菜单/确认弹层, 扫描不打断阅读">
+            <label class="flex items-center gap-1.5 text-[11px] mt-1 text-[#3a3f3a]" title="屏蔽时隐藏 X 的菜单/确认弹层, 扫描不打断阅读">
               <input id="xcbb-silent" type="checkbox"> 静默屏蔽(不显示确认弹窗)
             </label>
             <div class="flex items-center justify-between mt-2" title="每次屏蔽之间的间隔, 防风控, 建议≥1000ms">
-              <span class="text-[11px] text-[#c9d1d9]">屏蔽间隔</span>
+              <span class="text-[11px] text-[#3a3f3a]">屏蔽间隔</span>
               <div class="flex items-center gap-1">
                 <input id="xcbb-opt-blockdelay" type="number" min="200" max="10000" step="100" class="xcbb-num-input">
                 <span class="text-[10px] xcbb-dim">ms</span>
@@ -966,25 +983,25 @@
             </div>
             <h3 class="xcbb-section-title mt-3 mb-1.5">扫描参数</h3>
             <div class="flex items-center justify-between mt-1.5" title="每轮滚动/展开加载之间的等待时间">
-              <span class="text-[11px] text-[#c9d1d9]">滚动间隔</span>
+              <span class="text-[11px] text-[#3a3f3a]">滚动间隔</span>
               <div class="flex items-center gap-1">
                 <input id="xcbb-opt-scrolldelay" type="number" min="200" max="10000" step="100" class="xcbb-num-input">
                 <span class="text-[10px] xcbb-dim">ms</span>
               </div>
             </div>
             <div class="flex items-center justify-between mt-1.5" title="单次扫描最大轮数上限">
-              <span class="text-[11px] text-[#c9d1d9]">最大轮数</span>
+              <span class="text-[11px] text-[#3a3f3a]">最大轮数</span>
               <input id="xcbb-opt-maxrounds" type="number" min="1" max="500" step="1" class="xcbb-num-input">
             </div>
             <div class="flex items-center justify-between mt-1.5" title="连续N轮无新评论即自动停止">
-              <span class="text-[11px] text-[#c9d1d9]">闲置停止</span>
+              <span class="text-[11px] text-[#3a3f3a]">闲置停止</span>
               <div class="flex items-center gap-1">
                 <input id="xcbb-opt-idlerounds" type="number" min="1" max="20" step="1" class="xcbb-num-input">
                 <span class="text-[10px] xcbb-dim">轮</span>
               </div>
             </div>
             <div class="flex items-center justify-between mt-1.5" title="收起圆点的停靠位置">
-              <span class="text-[11px] text-[#c9d1d9]">圆点停靠</span>
+              <span class="text-[11px] text-[#3a3f3a]">圆点停靠</span>
               <select id="xcbb-dock" class="xcbb-num-input">
                 <option value="top">上</option>
                 <option value="center">中</option>
@@ -1823,7 +1840,7 @@
     el('xcbb-stop').disabled = !running;
     const st = el('xcbb-status');
     st.textContent = running ? '扫描中…' : '待机';
-    st.style.color = running ? '#f0a020' : '';
+    st.style.color = running ? '#a3741f' : '';
     // 圆点扫描计数徽标(仅收起且扫描中显示)
     const pc = el('xcbb-pill-count');
     if (pc) {
