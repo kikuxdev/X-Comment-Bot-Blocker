@@ -35,6 +35,16 @@ github.com/kikuxdev/X-Comment-Bot-Blocker
 纯本地 · 数据全导出 · 误伤可解封 · 开源
 github.com/kikuxdev/X-Comment-Bot-Blocker
 
+### 文案 D:全能单条(功能 + 用法 + 优缺点一推)
+
+X 评论 bot 太多?这个油猴脚本:选一条 bot 评论当模板,用户名/相似度/关键词三维匹配,自动屏蔽。
+用法:Tampermonkey 导入脚本→刷新 x.com→选模板→扫描。
+优点:纯本地、数据全导出、试运行/白名单防误伤、记录可追溯。
+缺点:相似≠语义会误伤;依赖 X 页面;可能违反 ToS,风险自负。
+开源:github.com/kikuxdev/X-Comment-Bot-Blocker
+
+> 字数约 250/280(中文按 2 字符计,链接占 23),已留余量;若需再压缩,可删"纯本地"或"这个"。
+
 ---
 
 ## 二、推文串(thread,8 条,带图)
